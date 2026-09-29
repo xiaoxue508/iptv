@@ -181,12 +181,15 @@ int playlist_build(int r2h_http, dbuf *out, int *n_m, int *n_f, int *n_u)
                 if (strcmp(cat_of(name), CATS[ci])) continue;
                 const char *uid = jval_str(jobj_get(c, "user_channel_id"));
                 push_extinf(&body, name, CATS[ci], uid ? uid : "");
-                dbuf u;
+                dbuf path, u;
+                dbuf_init(&path);
                 dbuf_init(&u);
+                dbuf_add(&path, "组播/");
+                dbuf_add(&path, name);
                 dbuf_add(&u, g.r2h);
                 dbuf_addc(&u, '/');
-                dbuf_add(&u, "组播/");
-                urlquote_to(&u, name, "/");
+                urlquote_to(&u, path.p ? path.p : "", "/");
+                dbuf_free(&path);
                 sl_push(&body, u.p ? u.p : "");
                 dbuf_free(&u);
                 nm++;
