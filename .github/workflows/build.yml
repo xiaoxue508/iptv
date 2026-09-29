@@ -54,7 +54,11 @@ jobs:
           rsync -a --exclude .git "$GITHUB_WORKSPACE/" package/iptvd/
           echo "CONFIG_PACKAGE_iptvd=y" >> .config
           make defconfig
-          make package/iptvd/compile -j"$(nproc)"
+          if ! make package/iptvd/compile -j"$(nproc)"; then
+            echo "== retry verbose =="
+            make package/iptvd/compile -j1 V=s 2>&1 | tail -n 150
+            exit 1
+          fi
 
       - name: Collect IPK
         run: |

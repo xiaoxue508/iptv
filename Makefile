@@ -13,7 +13,7 @@ define Package/iptvd
   SECTION:=net
   CATEGORY:=Network
   TITLE:=IPTV control-plane daemon (EPG / catchup / playlist)
-  DEPENDS:=+libc +libcurl4
+  DEPENDS:=+libcurl
 endef
 
 define Package/iptvd/description
