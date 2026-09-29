@@ -572,6 +572,7 @@ static int cmd_epg(void)
 
 static int cmd_status(void)
 {
+    cache_load_disk();
     dbuf out;
     dbuf_init(&out);
     status_page(&out);
