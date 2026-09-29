@@ -43,21 +43,23 @@ jobs:
 
       - name: Extract SDK, feeds, build
         run: |
-          mkdir -p sdk
-          tar --zstd -xf sdk.tar.zst -C sdk --strip-components=1
-          cd sdk
-          ./scripts/feeds update packages
+          SDK="$RUNNER_TEMP/sdk"
+          mkdir -p "$SDK"
+          tar --zstd -xf sdk.tar.zst -C "$SDK" --strip-components=1
+          cd "$SDK"
+          # base feed provides zlib/libopenssl/ca-bundle (libcurl deps)
+          ./scripts/feeds update base packages
           ./scripts/feeds install libcurl
           mkdir -p package/iptvd
-          rsync -a --exclude .git --exclude sdk.tar.zst --exclude out \
-            "$GITHUB_WORKSPACE/" package/iptvd/
+          rsync -a --exclude .git "$GITHUB_WORKSPACE/" package/iptvd/
+          echo "CONFIG_PACKAGE_iptvd=y" >> .config
           make defconfig
           make package/iptvd/compile -j"$(nproc)"
 
       - name: Collect IPK
         run: |
           mkdir -p out
-          find sdk/bin -name 'iptvd_*.ipk' -print -exec cp {} out/ \;
+          find "$RUNNER_TEMP/sdk/bin" -name 'iptvd_*.ipk' -print -exec cp {} out/ \;
           ls -la out
 
       - name: Upload artifact

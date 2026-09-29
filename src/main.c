@@ -124,7 +124,7 @@ static int selftest(void)
     {   /* json dump == python json.dumps(..., ensure_ascii=False, indent=1) */
         jv *o = jobj();
         char *s;
-        const char *want = "{\n  \"a\": 1,\n  \"b\": \"中\"\n}";
+        const char *want = "{\n \"a\": 1,\n \"b\": \"中\"\n}";
         jobj_set(o, "a", jnum("1"));
         jobj_set(o, "b", jstr("中"));
         s = json_dump_str(o, 1);
