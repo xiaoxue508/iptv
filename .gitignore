@@ -1,0 +1,5 @@
+# untracked build outputs
+*.o
+/src/iptvd
+sdk.tar.zst
+out/

@@ -1,0 +1,68 @@
+name: build-ipk
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host build deps
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Build (host)
+        run: make -C src
+      - name: Selftest (T1/T2 sign golden vectors + gbk/json/urlenc/time)
+        run: ./src/iptvd selftest
+      - name: sign CLI check
+        run: |
+          got=$(./src/iptvd sign --challenge X --rnd 00000000)
+          want="DBEFF291C6F9F336A46CF3AAA6F601CEA86ADCB22E8A904520956AF9BB50E299F17CF5328ECFA05FC69D1F33C6E26844A10A8645A3A9529A67A2D683503EB4587747AA5DE3D5C653FD612A6794BFCC7F481F6E5683E60014"
+          [ "$got" = "$want" ]
+
+  build-ipk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache SDK tarball
+        uses: actions/cache@v4
+        with:
+          path: sdk.tar.zst
+          key: immortalwrt-sdk-24.10.4-mediatek-filogic-x86_64
+
+      - name: Download SDK
+        run: |
+          if [ ! -s sdk.tar.zst ]; then
+            curl -fL --retry 3 -o sdk.tar.zst \
+              https://downloads.immortalwrt.org/releases/24.10.4/targets/mediatek/filogic/immortalwrt-sdk-24.10.4-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+          fi
+
+      - name: Extract SDK, feeds, build
+        run: |
+          mkdir -p sdk
+          tar --zstd -xf sdk.tar.zst -C sdk --strip-components=1
+          cd sdk
+          ./scripts/feeds update packages
+          ./scripts/feeds install libcurl
+          mkdir -p package/iptvd
+          rsync -a --exclude .git --exclude sdk.tar.zst --exclude out \
+            "$GITHUB_WORKSPACE/" package/iptvd/
+          make defconfig
+          make package/iptvd/compile -j"$(nproc)"
+
+      - name: Collect IPK
+        run: |
+          mkdir -p out
+          find sdk/bin -name 'iptvd_*.ipk' -print -exec cp {} out/ \;
+          ls -la out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iptvd-ipk
+          path: out/*.ipk
+          if-no-files-found: error
