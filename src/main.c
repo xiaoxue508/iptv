@@ -221,8 +221,8 @@ int main(int argc, char **argv)
     if (!offline) {
         if (conf_load(config) < 0 && strcmp(config, "/etc/iptvd.conf"))
             logmsg("warning: cannot read %s, using defaults", config);
-        conf_resolve_paths();
     }
+    conf_resolve_paths();
 
     if (!strcmp(cmd, "selftest")) return selftest();
     if (!strcmp(cmd, "sign")) return cmd_sign(argc - i, argv + i);
