@@ -6,6 +6,8 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <pthread.h>
+#include <sys/stat.h>
+#include <sys/stat.h>
 
 static pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -202,4 +204,21 @@ char *read_file(const char *path, size_t *len)
     if (!b.p) b.p = xstrdup("");
     if (len) *len = b.len;
     return dbuf_steal(&b);
+}
+
+int mkdir_p(const char *path)
+{
+    if (!path || !*path) return -1;
+    char buf[512];
+    snprintf(buf, sizeof buf, "%s", path);
+    size_t n = strlen(buf);
+    while (n > 1 && buf[n - 1] == '/') buf[--n] = 0;
+    for (char *p = buf + 1; *p; p++) {
+        if (*p != '/') continue;
+        *p = 0;
+        if (mkdir(buf, 0755) != 0 && errno != EEXIST) return -1;
+        *p = '/';
+    }
+    if (mkdir(buf, 0755) != 0 && errno != EEXIST) return -1;
+    return 0;
 }

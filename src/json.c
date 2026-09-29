@@ -351,3 +351,26 @@ char *json_dump_str(const jv *v, int indent)
     dump(v, &b, indent, 0);
     return dbuf_steal(&b);
 }
+
+jv *jv_clone(const jv *v)
+{
+    if (!v) return NULL;
+    switch (v->t) {
+    case JNULL: return jnull();
+    case JBOOL: return jbool(v->b);
+    case JNUM:  return jnum(v->num ? v->num : "null");
+    case JSTR:  return jstrn(v->s ? v->s : "", v->slen);
+    case JARR: {
+        jv *a = jarr();
+        for (size_t i = 0; i < v->n; i++) jarr_push(a, jv_clone(v->items[i]));
+        return a;
+    }
+    case JOBJ: {
+        jv *o = jobj();
+        for (size_t i = 0; i < v->nm; i++)
+            jobj_set(o, v->ms[i].k, jv_clone(v->ms[i].v));
+        return o;
+    }
+    }
+    return NULL;
+}

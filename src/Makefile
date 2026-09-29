@@ -1,5 +1,5 @@
 CC ?= gcc
-CFLAGS ?= -O2 -std=gnu99 -Wall -Wextra
+CFLAGS ?= -O2 -std=gnu99 -Wall -Wextra -D_GNU_SOURCE
 LDLIBS ?= -lcurl -lpthread
 
 OBJS := $(patsubst %.c,%.o,$(wildcard *.c))

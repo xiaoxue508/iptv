@@ -1,7 +1,14 @@
+#include "cache.h"
+#include "catchup.h"
 #include "common.h"
+#include "epgxml.h"
 #include "gbk.h"
+#include "http.h"
 #include "json.h"
 #include "platform.h"
+#include "playlist.h"
+#include "server.h"
+#include "status.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -184,12 +191,402 @@ static int cmd_sign(int argc, char **argv)
     return 0;
 }
 
+
+/* ------------------------- shared helpers -------------------------------- */
+
+/* epg.py _channel_code: channel_code wins, else channels.json lookup */
+static char *resolve_channel_code(const char *channel, const char *chcode)
+{
+    if (chcode && *chcode) return xstrdup(chcode);
+    const char *want = channel ? channel : "None";
+
+    size_t len;
+    char *raw = read_file(g.channels, &len);
+    if (!raw) {
+        fprintf(stderr, "channel %s not found in channels.json\n", want);
+        return NULL;
+    }
+    char *err = NULL;
+    jv *data = json_parse(raw, len, &err);
+    free(err);
+    free(raw);
+    jv *chs = NULL;
+    if (data && data->t == JARR) chs = data;
+    else if (data && data->t == JOBJ) {
+        const jv *c = jobj_get(data, "channels");
+        if (c && c->t == JARR) chs = jv_clone(c);
+        jv_free(data);
+    } else {
+        jv_free(data);
+    }
+    char *code = NULL;
+    if (chs && chs->t == JARR)
+        for (size_t i = 0; i < chs->n; i++) {
+            jv *c = chs->items[i];
+            if (!c || c->t != JOBJ) continue;
+            const jv *u = jobj_get(c, "user_channel_id");
+            const jv *cid = jobj_get(c, "channel_id");
+            const char *us = u && u->t == JSTR ? u->s
+                           : (u && u->t == JNUM && u->num ? u->num : NULL);
+            if (us && !strcmp(us, want)) {
+                if (cid && cid->t == JSTR && cid->s) code = xstrdup(cid->s);
+                break;
+            }
+        }
+    jv_free(chs);
+    if (!code)
+        fprintf(stderr, "channel %s not found in channels.json\n", want);
+    return code;
+}
+
+static jv *load_channels_file(void)
+{
+    size_t len;
+    char *raw = read_file(g.channels, &len);
+    if (!raw) return NULL;
+    char *err = NULL;
+    jv *data = json_parse(raw, len, &err);
+    free(err);
+    free(raw);
+    if (!data) return NULL;
+    if (data->t == JARR) return data;
+    if (data->t == JOBJ) {
+        const jv *c = jobj_get(data, "channels");
+        jv *r = (c && c->t == JARR) ? jv_clone(c) : NULL;
+        jv_free(data);
+        return r;
+    }
+    jv_free(data);
+    return NULL;
+}
+
+static const char *jval(const jv *c, const char *k)
+{
+    const jv *v = c && c->t == JOBJ ? jobj_get(c, k) : NULL;
+    if (!v || v->t == JNULL) return "";
+    if (v->t == JSTR) return v->s ? v->s : "";
+    if (v->t == JNUM) return v->num ? v->num : "0";
+    if (v->t == JBOOL) return v->b ? "true" : "false";
+    return "";
+}
+
+/* ------------------------- login ----------------------------------------- */
+
+static int cmd_login(int argc, char **argv)
+{
+    const char *save = g.session;
+    for (int i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "--save")) save = optval(argc, argv, &i);
+        else if (!strcmp(argv[i], "--auth-mode")) {
+            const char *m = optval(argc, argv, &i);
+            if (strcmp(m, "sign")) {
+                fprintf(stderr, "login: only --auth-mode sign is supported\n");
+                return 2;
+            }
+        } else {
+            fprintf(stderr, "login: unknown argument %s\n", argv[i]);
+            return 2;
+        }
+    }
+    char err[512];
+    err[0] = 0;
+    if (plat_login(save, err, sizeof err) != 0) {
+        fprintf(stderr, "LOGIN FAILED: %s\n", err);
+        return 1;
+    }
+    /* epg.py prints user_token/user_group/epg_group/challenge/authenticator/
+       channels; challenge+authenticator are not retained in-process */
+    int nch = 0;
+    dbuf dummy;
+    dbuf_init(&dummy);
+    if (plat_channels_json(&dummy, &nch) != 0) nch = 0;
+    dbuf_free(&dummy);
+
+    jv *o = jobj();
+    jobj_set(o, "user_token", jstr(g_sess.user_token));
+    jobj_set(o, "user_group", jstr(g_sess.user_grp));
+    jobj_set(o, "epg_group", jstr(g_sess.epg_grp));
+    char num[16];
+    snprintf(num, sizeof num, "%d", nch);
+    jobj_set(o, "channels", jnum(num));
+    char *s = json_dump_str(o, 1);
+    jv_free(o);
+    puts(s);
+    free(s);
+    return 0;
+}
+
+/* ------------------------- channels -------------------------------------- */
+
+static int cmd_channels(int argc, char **argv)
+{
+    const char *out_path = g.channels;
+    for (int i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "--out")) out_path = optval(argc, argv, &i);
+        else {
+            fprintf(stderr, "channels: unknown argument %s\n", argv[i]);
+            return 2;
+        }
+    }
+    dbuf out;
+    dbuf_init(&out);
+    int n = 0;
+    if (plat_channels_json(&out, &n) != 0) {
+        fprintf(stderr, "channels fetch failed\n");
+        dbuf_free(&out);
+        return 1;
+    }
+    FILE *f = fopen(out_path, "wb");
+    if (!f || (out.len && fwrite(out.p, 1, out.len, f) != out.len)) {
+        if (f) fclose(f);
+        fprintf(stderr, "cannot write %s\n", out_path);
+        dbuf_free(&out);
+        return 1;
+    }
+    fclose(f);
+    printf("channels: %d -> %s\n", n, out_path);
+
+    char *err = NULL;
+    jv *data = json_parse(out.p ? out.p : "", out.len, &err);
+    free(err);
+    dbuf_free(&out);
+    jv *chs = NULL;
+    if (data && data->t == JARR) chs = data;
+    else if (data && data->t == JOBJ) {
+        const jv *c = jobj_get(data, "channels");
+        if (c && c->t == JARR) chs = jv_clone(c);
+        jv_free(data);
+    } else {
+        jv_free(data);
+    }
+    if (chs && chs->t == JARR) {
+        for (size_t i = 0; i < chs->n && i < 5; i++) {
+            jv *c = chs->items[i];
+            printf("  %4s %s %s fcc=%s\n", jval(c, "user_channel_id"),
+                   jval(c, "name"), jval(c, "channel_url"), jval(c, "fcc"));
+        }
+    }
+    jv_free(chs);
+    return 0;
+}
+
+/* ------------------------- programs -------------------------------------- */
+
+static int cmd_programs(int argc, char **argv)
+{
+    const char *channel = NULL, *chcode = NULL, *date = NULL;
+    int as_json = 0;
+    for (int i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "--channel")) channel = optval(argc, argv, &i);
+        else if (!strcmp(argv[i], "--channel-code")) chcode = optval(argc, argv, &i);
+        else if (!strcmp(argv[i], "--date")) date = optval(argc, argv, &i);
+        else if (!strcmp(argv[i], "--json")) as_json = 1;
+        else {
+            fprintf(stderr, "programs: unknown argument %s\n", argv[i]);
+            return 2;
+        }
+    }
+    if (!date) {
+        fprintf(stderr, "programs: --date required\n");
+        return 2;
+    }
+    char *code = resolve_channel_code(channel, chcode);
+    if (!code) return 1;
+
+    jv *progs = plat_programs(code, date);
+    free(code);
+    if (!progs) return 1;
+
+    if (as_json) {
+        char *s = json_dump_str(progs, 1);
+        puts(s);
+        free(s);
+    } else if (progs->t == JARR) {
+        for (size_t i = 0; i < progs->n; i++) {
+            jv *p = progs->items[i];
+            printf("%s  %s-%.5s  st=%s  %s\n", jval(p, "prevuecode"),
+                   jval(p, "showtime"), jval(p, "endtime"), jval(p, "status"),
+                   jval(p, "prevuename"));
+        }
+    }
+    printf("# %zu programs\n", progs->t == JARR ? progs->n : 0);
+    jv_free(progs);
+    return 0;
+}
+
+/* ------------------------- tvod ------------------------------------------ */
+
+static int cmd_tvod(int argc, char **argv)
+{
+    const char *pc = NULL, *channel = NULL, *chcode = NULL, *mixno = NULL;
+    const char *columncode = "1D04", *date = NULL;
+    int isfromchannel = 0;
+    for (int i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "--prevuecode")) pc = optval(argc, argv, &i);
+        else if (!strcmp(argv[i], "--channel")) channel = optval(argc, argv, &i);
+        else if (!strcmp(argv[i], "--channel-code")) chcode = optval(argc, argv, &i);
+        else if (!strcmp(argv[i], "--mixno")) mixno = optval(argc, argv, &i);
+        else if (!strcmp(argv[i], "--columncode")) columncode = optval(argc, argv, &i);
+        else if (!strcmp(argv[i], "--date")) date = optval(argc, argv, &i);
+        else if (!strcmp(argv[i], "--isfromchannel")) isfromchannel = 1;
+        else {
+            fprintf(stderr, "tvod: unknown argument %s\n", argv[i]);
+            return 2;
+        }
+    }
+    if (!pc || !date) {
+        fprintf(stderr, "tvod: --prevuecode and --date required\n");
+        return 2;
+    }
+    char *code = resolve_channel_code(channel, chcode);
+    if (!code) return 1;
+
+    /* mixno: --mixno | --channel | lookup by code | "1" (epg.py _channel_user_id) */
+    char *mixbuf = NULL;
+    if (!mixno) {
+        if (channel) {
+            mixno = channel;
+        } else {
+            mixno = "1";
+            jv *chs = load_channels_file();
+            if (chs && chs->t == JARR)
+                for (size_t i = 0; i < chs->n; i++) {
+                    jv *c = chs->items[i];
+                    if (!c || c->t != JOBJ) continue;
+                    const jv *cid = jobj_get(c, "channel_id");
+                    if (cid && cid->t == JSTR && cid->s && !strcmp(cid->s, code)) {
+                        mixbuf = xstrdup(jval(c, "user_channel_id"));
+                        mixno = mixbuf;
+                        break;
+                    }
+                }
+            jv_free(chs);
+        }
+    }
+
+    dbuf out;
+    dbuf_init(&out);
+    int rc = plat_tvod(pc, code, mixno, columncode, date, isfromchannel, &out);
+    free(code);
+    free(mixbuf);
+    if (rc != 0) {
+        fprintf(stderr, "tvod resolve failed for %s\n", pc);
+        dbuf_free(&out);
+        return 1;
+    }
+    puts(out.p ? out.p : "");
+    dbuf_free(&out);
+    return 0;
+}
+
+/* ------------------------- live-sdp -------------------------------------- */
+
+static int cmd_live_sdp(int argc, char **argv)
+{
+    const char *channel = NULL, *channel_id = NULL;
+    for (int i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "--channel")) channel = optval(argc, argv, &i);
+        else if (!strcmp(argv[i], "--channel-id")) channel_id = optval(argc, argv, &i);
+        else {
+            fprintf(stderr, "live-sdp: unknown argument %s\n", argv[i]);
+            return 2;
+        }
+    }
+
+    jv *chs = NULL;
+    if (g_sess.have) {   /* --session given -> live epg.channels() */
+        dbuf out;
+        dbuf_init(&out);
+        int n = 0;
+        if (plat_channels_json(&out, &n) == 0) {
+            char *err = NULL;
+            jv *data = json_parse(out.p ? out.p : "", out.len, &err);
+            free(err);
+            if (data && data->t == JARR) chs = data;
+            else if (data && data->t == JOBJ) {
+                const jv *c = jobj_get(data, "channels");
+                if (c && c->t == JARR) chs = jv_clone(c);
+                jv_free(data);
+            } else {
+                jv_free(data);
+            }
+        }
+        dbuf_free(&out);
+    } else {
+        chs = load_channels_file();
+    }
+
+    jv *hit = NULL;
+    if (chs && chs->t == JARR)
+        for (size_t i = 0; i < chs->n && !hit; i++) {
+            jv *c = chs->items[i];
+            if (!c || c->t != JOBJ) continue;
+            if (channel && !strcmp(jval(c, "user_channel_id"), channel)) hit = c;
+            else if (!channel && channel_id &&
+                     !strcmp(jval(c, "channel_id"), channel_id)) hit = c;
+        }
+    if (!hit) {
+        fprintf(stderr, "channel not found\n");
+        jv_free(chs);
+        return 1;
+    }
+    printf("%s %s\n  igmp %s\n  sdp  %s\n", jval(hit, "user_channel_id"),
+           jval(hit, "name"), jval(hit, "channel_url"), jval(hit, "sdp"));
+    jv_free(chs);
+    return 0;
+}
+
+/* ------------------------- playlist / epg / status ----------------------- */
+
+static int cmd_playlist(int argc, char **argv)
+{
+    int r2h_http = 0;
+    for (int i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "--r2h-http")) r2h_http = 1;
+        else {
+            fprintf(stderr, "playlist: unknown argument %s\n", argv[i]);
+            return 2;
+        }
+    }
+    dbuf out;
+    dbuf_init(&out);
+    int nm = 0, nf = 0, nu = 0;
+    if (playlist_build(r2h_http, &out, &nm, &nf, &nu) != 0) {
+        fprintf(stderr, "%s\n", out.p ? out.p : "playlist build failed");
+        dbuf_free(&out);
+        return 1;
+    }
+    fwrite(out.p, 1, out.len, stdout);
+    dbuf_free(&out);
+    fprintf(stderr, "mcast=%d fcc=%d unicast=%d\n", nm, nf, nu);
+    return 0;
+}
+
+static int cmd_epg(void)
+{
+    cache_load_disk();
+    int rc = epgxml_build();
+    if (rc == 0) epgxml_mark_ready();
+    return rc == 0 ? 0 : 1;
+}
+
+static int cmd_status(void)
+{
+    dbuf out;
+    dbuf_init(&out);
+    status_page(&out);
+    fwrite(out.p, 1, out.len, stdout);
+    dbuf_free(&out);
+    return 0;
+}
+
 /* ------------------------------------------------------------------------ */
 
 int main(int argc, char **argv)
 {
     const char *config = "/etc/iptvd.conf";
     const char *cmd = NULL;
+    int session_given = 0;
     int i;
 
     conf_defaults();
@@ -200,7 +597,7 @@ int main(int argc, char **argv)
         if (!strcmp(a, "--version")) { printf("iptvd " IPTVD_VERSION "\n"); return 0; }
         if (!strcmp(a, "-h") || !strcmp(a, "--help")) { usage(); return 0; }
         if (!strcmp(a, "--config")) { config = optval(argc, argv, &i); continue; }
-        if (!strcmp(a, "--session")) { snprintf(g.session, sizeof g.session, "%s", optval(argc, argv, &i)); continue; }
+        if (!strcmp(a, "--session")) { session_given = 1; snprintf(g.session, sizeof g.session, "%s", optval(argc, argv, &i)); continue; }
         if (!strcmp(a, "--eas")) { snprintf(g.eas_host, sizeof g.eas_host, "%s", optval(argc, argv, &i)); continue; }
         if (!strcmp(a, "--epg")) { snprintf(g.epg_host, sizeof g.epg_host, "%s", optval(argc, argv, &i)); continue; }
         if (!strcmp(a, "--userid")) { snprintf(g.userid, sizeof g.userid, "%s", optval(argc, argv, &i)); continue; }
@@ -227,6 +624,30 @@ int main(int argc, char **argv)
     if (!strcmp(cmd, "selftest")) return selftest();
     if (!strcmp(cmd, "sign")) return cmd_sign(argc - i, argv + i);
 
-    fprintf(stderr, "%s: not implemented yet\n", cmd);
-    return 2;
+    if (strcmp(cmd, "login") && strcmp(cmd, "channels") &&
+        strcmp(cmd, "programs") && strcmp(cmd, "tvod") &&
+        strcmp(cmd, "live-sdp") && strcmp(cmd, "playlist") &&
+        strcmp(cmd, "epg") && strcmp(cmd, "serve") && strcmp(cmd, "status")) {
+        fprintf(stderr, "%s: unknown command\n", cmd);
+        return 2;
+    }
+
+    http_init();
+
+    if (!strcmp(cmd, "login")) return cmd_login(argc - i, argv + i);
+
+    /* epg.py: --session given -> load it or die (after the login branch) */
+    if (session_given && plat_load_session(g.session) != 0) {
+        fprintf(stderr, "session file %s not found (run 'login' first)\n", g.session);
+        return 1;
+    }
+
+    if (!strcmp(cmd, "channels")) return cmd_channels(argc - i, argv + i);
+    if (!strcmp(cmd, "programs")) return cmd_programs(argc - i, argv + i);
+    if (!strcmp(cmd, "tvod")) return cmd_tvod(argc - i, argv + i);
+    if (!strcmp(cmd, "live-sdp")) return cmd_live_sdp(argc - i, argv + i);
+    if (!strcmp(cmd, "playlist")) return cmd_playlist(argc - i, argv + i);
+    if (!strcmp(cmd, "epg")) return cmd_epg();
+    if (!strcmp(cmd, "serve")) return server_run() == 0 ? 0 : 1;
+    return cmd_status();
 }

@@ -41,4 +41,6 @@ char *json_dump_str(const jv *v, int indent);
 /* python json.dumps(str, ensure_ascii=False) escaping of one string */
 void json_dump_str_escaped(dbuf *out, const char *s, size_t n);
 
+jv *jv_clone(const jv *v);      /* deep copy; NULL in -> NULL out */
+
 #endif

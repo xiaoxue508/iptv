@@ -37,6 +37,7 @@ void urlenc_to(dbuf *out, const char *s);
 void urlquote_to(dbuf *out, const char *s, const char *extra_safe);
 
 int write_atomic(const char *path, const void *data, size_t n);
+int mkdir_p(const char *path);
 char *read_file(const char *path, size_t *len);   /* NUL-terminated; NULL if missing */
 
 typedef struct { const char *k, *v; } kv;
