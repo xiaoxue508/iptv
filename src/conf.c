@@ -61,7 +61,10 @@ static void set_kv(const char *key, const char *val)
     else if (!strcmp(key, "epg_host")) SETSTR(epg_host, val);
     else if (!strcmp(key, "userid")) SETSTR(userid, val);
     else if (!strcmp(key, "stbid")) SETSTR(stbid, val);
-    else if (!strcmp(key, "stbip")) SETSTR(stbip, val);
+    else if (!strcmp(key, "stbip")) {
+        if (!strcmp(val, "auto")) { g.stbip_auto = 1; g.stbip[0] = 0; }
+        else { g.stbip_auto = 0; SETSTR(stbip, val); }
+    }
     else if (!strcmp(key, "stbmac")) SETSTR(stbmac, val);
     else if (!strcmp(key, "auth_key")) SETSTR(auth_key, val);
     else if (!strcmp(key, "stbtype")) SETSTR(stbtype, val);
@@ -81,6 +84,7 @@ static void set_kv(const char *key, const char *val)
     else if (!strcmp(key, "worker_s")) g.worker_s = atoi(val);
     else if (!strcmp(key, "port")) g.port = atoi(val);
     else if (!strcmp(key, "xmltv_wait_s")) g.xmltv_wait_s = atoi(val);
+    else if (!strcmp(key, "upstream_interface")) SETSTR(upstream_interface, val);
     else if (!strcmp(key, "data_dir")) SETSTR(data_dir, val);
     else if (!strcmp(key, "cache_dir")) SETSTR(cache_dir, val);
     else if (!strcmp(key, "session")) SETSTR(session, val);

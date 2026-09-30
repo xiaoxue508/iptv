@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "http.h"
 #include "gbk.h"
+#include "uplink.h"
 #include <curl/curl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -169,6 +170,8 @@ static int perform(const char *url, const char *method, const char *body,
     curl_easy_setopt(c, CURLOPT_WRITEDATA, &a);
     curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, header_cb);
     curl_easy_setopt(c, CURLOPT_HEADERDATA, &a);
+    if (uplink_ip()[0])
+        curl_easy_setopt(c, CURLOPT_INTERFACE, uplink_ip());  /* bind to uplink */
     if (!strcmp(method, "POST")) {
         curl_easy_setopt(c, CURLOPT_POST, 1L);
         curl_easy_setopt(c, CURLOPT_POSTFIELDS, body ? body : "");

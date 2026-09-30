@@ -6,6 +6,7 @@
 #include "platform.h"
 #include "playlist.h"
 #include "status.h"
+#include "uplink.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -251,6 +252,18 @@ static void *channels_thread(void *arg)
     return NULL;
 }
 
+/* re-programs uplink rule/table; the ISP can swap the DHCP gateway or the
+   whole address block at any time (100.72.x -> 10.156.17.x -> 10.156.22.x) */
+static void *uplink_thread(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        sleep(60);
+        uplink_ensure(1);
+    }
+    return NULL;
+}
+
 /* ---------------- main loop ---------------- */
 
 int server_run(void)
@@ -269,6 +282,10 @@ int server_run(void)
     pthread_t t1, t2;
     if (pthread_create(&t1, NULL, epg_thread, NULL) == 0) pthread_detach(t1);
     if (pthread_create(&t2, NULL, channels_thread, NULL) == 0) pthread_detach(t2);
+    {
+        pthread_t t3;
+        if (pthread_create(&t3, NULL, uplink_thread, NULL) == 0) pthread_detach(t3);
+    }
 
     logmsg("srcbox_bridge on :%d (epg=%s, channels ttl=%ds)",
            g.port, g.epg_file, g.ttl_channels);

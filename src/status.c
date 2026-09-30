@@ -3,6 +3,7 @@
 #include "epgxml.h"
 #include "json.h"
 #include "platform.h"
+#include "uplink.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -81,6 +82,11 @@ void status_json(dbuf *out)
 
     NUM(o, "programs_cache", cache_progs_count());
     jobj_set(o, "session", jbool(g_sess.have));
+
+    jv *u = jobj();
+    jobj_set(u, "interface", jstr(g.upstream_interface));
+    jobj_set(u, "ip", jstr(uplink_ip()));
+    jobj_set(o, "uplink", u);
 #undef NUM
 
     char *s = json_dump_str(o, 1);

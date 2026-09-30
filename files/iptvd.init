@@ -19,3 +19,7 @@ start_service() {
 service_triggers() {
 	procd_add_reload_trigger iptvd
 }
+
+# NOTE: the source rule (pref 1000 -> table 1001) installed by iptvd is left
+# in place on stop on purpose - it only matches packets sourced from the
+# uplink address (iptvd, r2h) and is re-proven/updated on next start.

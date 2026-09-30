@@ -77,6 +77,9 @@ return view.extend({
 						['版本', data.version || '-'],
 						['运行时长', fmtUptime(data.uptime_s)],
 						['监听端口', port],
+						['上游接口', (data.uplink && data.uplink.interface)
+							? data.uplink.interface + (data.uplink.ip ? ' (' + data.uplink.ip + ')' : '')
+							: '未配置'],
 						['会话', data.session ? '有效' : '未登录（自动重登）']
 					]),
 					card('频道表', [

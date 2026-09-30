@@ -9,6 +9,7 @@
 #include "playlist.h"
 #include "server.h"
 #include "status.h"
+#include "uplink.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -642,6 +643,7 @@ int main(int argc, char **argv)
         return 2;
     }
 
+    uplink_ensure(1);
     http_init();
 
     if (!strcmp(cmd, "login")) return cmd_login(argc - i, argv + i);
