@@ -180,6 +180,7 @@ typedef struct {
     jv **res;
     size_t n, next;
     pthread_mutex_t *lk;
+    pthread_cond_t *cv;
 } fetch_ctx;
 
 static void *fetch_worker(void *arg)
@@ -190,7 +191,11 @@ static void *fetch_worker(void *arg)
         size_t i = c->next++;
         pthread_mutex_unlock(c->lk);
         if (i >= c->n) return NULL;
-        c->res[i] = cache_get_programs(c->t[i].uid, c->t[i].date, 1, 1);
+        jv *p = cache_get_programs(c->t[i].uid, c->t[i].date, 1, 1);
+        pthread_mutex_lock(c->lk);
+        c->res[i] = p;
+        pthread_cond_signal(c->cv);
+        pthread_mutex_unlock(c->lk);
     }
 }
 
@@ -238,6 +243,26 @@ static int cname_cmp(const void *a, const void *b)
     return strcmp(x->name, y->name);
 }
 
+/* by_name.setdefault(name) + extend(parsed programs); main thread only */
+static void assemble_target(bn_t **bn, size_t *n_bn, const tgt_t *t,
+                            const jv *progs, long *seq)
+{
+    bn_t *slot = bn_find(bn, n_bn, t->name);
+    if (!progs || progs->t != JARR) return;
+    for (size_t j = 0; j < progs->n; j++) {
+        jv *p = progs->items[j];
+        if (!p || p->t != JOBJ) continue;
+        time_t b, e;
+        const jv *bv = jobj_get(p, "begintime");
+        const jv *ev = jobj_get(p, "endtime");
+        if (parse_bt(bv && bv->t == JSTR ? bv->s : NULL, &b) != 0) continue;
+        if (parse_bt(ev && ev->t == JSTR ? ev->s : NULL, &e) != 0) continue;
+        const jv *pv = jobj_get(p, "prevuename");
+        const char *title = jstr_or_null(pv);
+        bn_push(slot, b, e, title ? title : "", (*seq)++);
+    }
+}
+
 int epgxml_build(void)
 {
     pthread_mutex_lock(&b_lock);
@@ -263,42 +288,39 @@ int epgxml_build(void)
     res = xmalloc((n_t + 1) * sizeof *res);
     memset(res, 0, (n_t + 1) * sizeof *res);
 
-    {   /* ThreadPoolExecutor(max_workers=4) over all targets */
+    {   /* N fetch workers + in-order streaming assembly: each parsed result
+           is freed right after its titles are extracted (router only has
+           ~35MB free, holding all 500+ parsed entries at once OOMs). */
         pthread_mutex_t lk;
+        pthread_cond_t cv;
         pthread_mutex_init(&lk, NULL);
-        fetch_ctx ctx = { tgts, res, n_t, 0, &lk };
+        pthread_cond_init(&cv, NULL);
+        fetch_ctx ctx = { tgts, res, n_t, 0, &lk, &cv };
         pthread_t th[4];
-        int nth = n_t < 4 ? (int)n_t : 4;   /* 4 total, one runs on this thread */
-        int ncreated = nth > 0 ? nth - 1 : 0;
-        for (int i = 0; i < ncreated; i++)
-            if (pthread_create(&th[i], NULL, fetch_worker, &ctx) != 0) {
-                ncreated = i;
+        int nth = n_t < 4 ? (int)n_t : 4;
+        int ncreated = 0;
+        for (int i = 0; i < nth; i++)
+            if (pthread_create(&th[i], NULL, fetch_worker, &ctx) == 0)
+                ncreated++;
+            else
                 break;
-            }
-        fetch_worker(&ctx);
-        for (int i = 0; i < ncreated; i++) pthread_join(th[i], NULL);
-        pthread_mutex_destroy(&lk);
-    }
-
-    {   /* by_name.setdefault in target order, append parsed programs */
         long seq = 0;
         for (size_t i = 0; i < n_t; i++) {
-            bn_t *slot = bn_find(&bn, &n_bn, tgts[i].name);
-            jv *progs = res[i];
-            if (!progs || progs->t != JARR) continue;
-            for (size_t j = 0; j < progs->n; j++) {
-                jv *p = progs->items[j];
-                if (!p || p->t != JOBJ) continue;
-                time_t b, e;
-                const jv *bv = jobj_get(p, "begintime");
-                const jv *ev = jobj_get(p, "endtime");
-                if (parse_bt(bv && bv->t == JSTR ? bv->s : NULL, &b) != 0) continue;
-                if (parse_bt(ev && ev->t == JSTR ? ev->s : NULL, &e) != 0) continue;
-                const jv *pv = jobj_get(p, "prevuename");
-                const char *title = jstr_or_null(pv);
-                bn_push(slot, b, e, title ? title : "", seq++);
+            if (ncreated > 0) {
+                pthread_mutex_lock(&lk);
+                while (!res[i]) pthread_cond_wait(&cv, &lk);
+                pthread_mutex_unlock(&lk);
+            } else {   /* no workers (pthread_create failed): fetch inline */
+                res[i] = cache_get_programs(tgts[i].uid, tgts[i].date, 1, 1);
             }
+            jv *progs = res[i];
+            res[i] = NULL;
+            assemble_target(&bn, &n_bn, &tgts[i], progs, &seq);
+            jv_free(progs);
         }
+        for (int i = 0; i < ncreated; i++) pthread_join(th[i], NULL);
+        pthread_cond_destroy(&cv);
+        pthread_mutex_destroy(&lk);
     }
 
     {   /* build the document: "\n".join(out), no trailing newline */

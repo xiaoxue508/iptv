@@ -153,12 +153,77 @@ void cache_tvod_clear(void)
     pthread_mutex_unlock(&tv_lock);
 }
 
-/* ---------------- programs cache ---------------- */
+/* ---------------- programs cache ----------------
+   Entries hold the progs JSON as *text* (not a parsed jv tree): the router
+   only has ~35MB free and a parsed tree costs ~4x the raw JSON. The python
+   bridge keeps parsed objects because the NAS has GBs; outputs are identical
+   either way (get parses on hit, callers own the result). */
 
-typedef struct { char key[96]; long fetched; jv *progs; } prog_ent;
+typedef struct { char key[96]; long fetched; char *pj; } prog_ent;
 static pthread_mutex_t prog_lock = PTHREAD_MUTEX_INITIALIZER;
 static prog_ent *g_pe;
 static size_t g_pn, g_pcap;
+
+static long prog_find(const char *key);
+
+static jv *parse_progs_text(const char *t)
+{
+    if (!t) return NULL;
+    char *err = NULL;
+    jv *v = json_parse(t, strlen(t), &err);
+    free(err);
+    if (!v || v->t != JARR) { jv_free(v); return NULL; }
+    return v;
+}
+
+/* compact json text; only_if_absent = python dict.setdefault */
+static void prog_store(const char *key, long fetched, const jv *progs,
+                       int only_if_absent)
+{
+    char *compact = json_dump_str(progs, -1);
+    pthread_mutex_lock(&prog_lock);
+    long idx = prog_find(key);
+    if (idx < 0) {
+        if (g_pn == g_pcap) {
+            g_pcap = g_pcap ? g_pcap * 2 : 64;
+            g_pe = xrealloc(g_pe, g_pcap * sizeof *g_pe);
+        }
+        snprintf(g_pe[g_pn].key, sizeof g_pe[g_pn].key, "%s", key);
+        g_pe[g_pn].fetched = fetched;
+        g_pe[g_pn].pj = compact;
+        g_pn++;
+        compact = NULL;
+    } else if (!only_if_absent) {
+        free(g_pe[idx].pj);
+        g_pe[idx].pj = compact;
+        g_pe[idx].fetched = fetched;
+        compact = NULL;
+    }
+    pthread_mutex_unlock(&prog_lock);
+    free(compact);
+}
+
+/* copy text out under the lock, parse outside; *stale_flag = was-stale */
+static jv *prog_cache_take(const char *key, long now, int allow_stale,
+                           int *stale_flag)
+{
+    char *text = NULL;
+    int have = 0, fresh = 0;
+    pthread_mutex_lock(&prog_lock);
+    long idx = prog_find(key);
+    if (idx >= 0) {
+        have = 1;
+        fresh = allow_stale || (now - g_pe[idx].fetched < (long)g.ttl_progs);
+        if (g_pe[idx].pj) text = xstrdup(g_pe[idx].pj);
+    }
+    pthread_mutex_unlock(&prog_lock);
+    if (!have) return NULL;
+    jv *arr = parse_progs_text(text);
+    free(text);
+    if (!arr) arr = jarr();
+    *stale_flag = !fresh;
+    return arr;
+}
 
 static void prog_key(char *out, size_t n, const char *uid, const char *date)
 {
@@ -235,19 +300,9 @@ void cache_load_disk(void)
 
         char key[96];
         prog_key(key, sizeof key, uid, date);
-        pthread_mutex_lock(&prog_lock);
-        if (prog_find(key) < 0) {
-            if (g_pn == g_pcap) {
-                g_pcap = g_pcap ? g_pcap * 2 : 64;
-                g_pe = xrealloc(g_pe, g_pcap * sizeof *g_pe);
-            }
-            const jv *fw = jobj_get(ent, "fetched");
-            snprintf(g_pe[g_pn].key, sizeof g_pe[g_pn].key, "%s", key);
-            g_pe[g_pn].fetched = (fw && fw->t == JNUM && fw->num) ? atol(fw->num) : 0;
-            g_pe[g_pn].progs = jv_clone(pr);
-            g_pn++;
-        }
-        pthread_mutex_unlock(&prog_lock);
+        const jv *fw = jobj_get(ent, "fetched");
+        long fetched = (fw && fw->t == JNUM && fw->num) ? atol(fw->num) : 0;
+        prog_store(key, fetched, pr, 1);     /* setdefault */
         jv_free(ent);
     }
     closedir(d);
@@ -288,45 +343,24 @@ jv *cache_get_programs(const char *uid, const char *date,
     char key[96];
     prog_key(key, sizeof key, uid, date);
     int can_relogin = retry_login;
+    jv *stale = NULL;
 
     for (;;) {
         long now = now_sec();
-        jv *hit = NULL, *stale = NULL;
-        pthread_mutex_lock(&prog_lock);
-        long idx = prog_find(key);
-        if (idx >= 0) {
-            long fetched = g_pe[idx].fetched;
-            if (allow_stale || now - fetched < g.ttl_progs)
-                hit = jv_clone(g_pe[idx].progs);
-            else
-                stale = jv_clone(g_pe[idx].progs);
-        }
-        pthread_mutex_unlock(&prog_lock);
-        if (hit) return hit;
+        int sf = 0;
+        jv *got = prog_cache_take(key, now, allow_stale, &sf);
+        if (got && !sf) { jv_free(stale); return got; }   /* fresh hit */
+        jv_free(stale);
+        stale = got;                                      /* may be NULL */
 
         char *chid = cache_channel_id(uid);
         jv *arr = chid ? plat_programs(chid, date) : NULL;
         free(chid);
 
         if (arr) {
-            pthread_mutex_lock(&prog_lock);
-            long idx2 = prog_find(key);
-            if (idx2 < 0) {
-                if (g_pn == g_pcap) {
-                    g_pcap = g_pcap ? g_pcap * 2 : 64;
-                    g_pe = xrealloc(g_pe, g_pcap * sizeof *g_pe);
-                }
-                snprintf(g_pe[g_pn].key, sizeof g_pe[g_pn].key, "%s", key);
-                g_pe[g_pn].fetched = now;
-                g_pe[g_pn].progs = jv_clone(arr);
-                g_pn++;
-            } else {
-                jv_free(g_pe[idx2].progs);
-                g_pe[idx2].progs = jv_clone(arr);
-                g_pe[idx2].fetched = now;
-            }
-            pthread_mutex_unlock(&prog_lock);
+            prog_store(key, now, arr, 0);
             prog_disk_write(uid, date, now, arr);
+            jv_free(stale);
             return arr;
         }
 
