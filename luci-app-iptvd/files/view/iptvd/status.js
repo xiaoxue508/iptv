@@ -107,8 +107,10 @@ var CSS = [
 	'.iptvd .ip-btn:hover{border-color:var(--accent);color:var(--accent)}',
 	'.iptvd .ip-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}',
 	'.iptvd .ip-btn.primary:hover{filter:brightness(1.08);color:#fff}',
-	'.iptvd .ip-btn.danger{color:#e5484d;border-color:rgba(229,72,77,.45)}',
-	'.iptvd .ip-btn.danger:hover{background:rgba(229,72,77,.09);color:#e5484d}',
+	'.iptvd .ip-btn.danger{background:#e5484d !important;border-color:#e5484d !important;',
+	'color:#fff !important}',
+	'.iptvd .ip-btn.danger:hover{background:#cc393d !important;border-color:#cc393d !important;',
+	'color:#fff !important;filter:brightness(1.08)}',
 	'.iptvd .ip-btn:disabled{opacity:.45;pointer-events:none}',
 
 	'.iptvd .ip-pre{margin:0;padding:6px 9px;background:rgba(127,127,127,.09);border-radius:6px;',
@@ -374,7 +376,7 @@ return view.extend({
 		var cfg = this._cfg || {};
 
 		if (st && st.ok === 0)
-			out.push(['error', 'iptvd serve 不可达（服务未运行或端口已改），先在「高级」页启动服务。']);
+			out.push(['error', 'iptvd serve 不可达（服务未运行或端口已改），先在「状态」页启动服务。']);
 
 		if (st && st.session === false)
 			out.push(['warning', '会话无效：serve 会自动重登，也可点「立即重登」手动触发。']);
@@ -401,13 +403,40 @@ return view.extend({
 		return out;
 	},
 
+	svcBox: function() {
+		var self = this;
+		var svc = self._svc || {};
+		return E('div', { 'class': 'ip-danger' }, [
+			E('h5', {}, '服务管理'),
+			E('div', { 'class': 'ip-note' },
+				'当前：' + (svc.running ? '运行中' : '已停止') +
+				'，开机自启 ' + (svc.enabled ? '开' : '关')),
+			E('div', { 'class': 'ip-actions', 'style': 'margin-top:6px' }, [
+				btn('启动', 'primary', function() {
+					self.doService('start');
+				}),
+				btn('停止', 'danger', function() {
+					self.doService('stop', '停止 iptvd 服务？所有播放列表/EPG 端点将不可用。');
+				}),
+				btn('重启', '', function() {
+					self.doRestart(null);
+				}),
+				btn(svc.enabled ? '关闭开机自启' : '开启开机自启', '', function() {
+					self.doService(svc.enabled ? 'disable' : 'enable');
+				})
+			])
+		]);
+	},
+
 	refreshStatus: function() {
 		var self = this;
-		return rpcStatus().then(function(st) {
-			self._st = st;
-			self.drawStatus();
-		}, function() {
-			self._st = null;
+		return Promise.all([
+			rpcStatus().catch(function() { return null; }),
+			rpcService('status').catch(function() { return null; })
+		]).then(function(r) {
+			self._st = r[0];
+			if (r[1])
+				self._svc = r[1];
 			self.drawStatus();
 		});
 	},
@@ -428,11 +457,9 @@ return view.extend({
 			nodes.push(sectionBox('服务', [
 				E('p', { 'class': 'ip-hint' }, st == null
 					? '状态不可读（iptvd 服务未运行，或 rpcd 插件 iptvd 异常）。'
-					: 'iptvd serve 未运行或不可达。'),
-				btn('启动服务', 'primary', function() {
-					self.doService('start');
-				})
+					: 'iptvd serve 未运行或不可达。')
 			]));
+			nodes.push(self.svcBox());
 			self._secStatus.replaceChildren.apply(self._secStatus, nodes);
 			return;
 		}
@@ -490,9 +517,9 @@ return view.extend({
 		actBtn('立即重登', 'relogin', null, function(n, b) { self.doAction(n, b); });
 		actBtn('刷新频道表', 'refresh', '立即刷新频道表？将重新登录并拉取全部频道。', function(n, b) { self.doAction(n, b); });
 		actBtn('重建XMLTV', 'epg', '立即重建 XMLTV EPG？需拉取节目数据，可能耗时数十秒。', function(n, b) { self.doAction(n, b); });
-		actBtn('重启服务', null, null, function(n, b) { self.doRestart(b); });
 		actions.appendChild(btn('手动刷新', '', function() { self.refreshStatus(); }));
 		nodes.push(actions);
+		nodes.push(self.svcBox());
 
 		var logToggle = btn(self._logOpen ? '隐藏日志' : '显示最近日志', '', function() {
 			self._logOpen = !self._logOpen;
@@ -957,28 +984,6 @@ return view.extend({
 			btn('保存原文', 'primary', function() { self.saveRaw(ta); })
 		]));
 		self.loadRaw(ta);
-
-		var svc = self._svc || {};
-		kids.push(E('div', { 'class': 'ip-danger' }, [
-			E('h5', {}, '服务管理'),
-			E('div', { 'class': 'ip-note' },
-				'当前：' + (svc.running ? '运行中' : '已停止') +
-				'，开机自启 ' + (svc.enabled ? '开' : '关')),
-			E('div', { 'class': 'ip-actions', 'style': 'margin-top:6px' }, [
-				btn('启动', 'primary', function() {
-					self.doService('start');
-				}),
-				btn('停止', 'danger', function() {
-					self.doService('stop', '停止 iptvd 服务？所有播放列表/EPG 端点将不可用。');
-				}),
-				btn('重启', '', function() {
-					self.doRestart(null);
-				}),
-				btn(svc.enabled ? '关闭开机自启' : '开启开机自启', '', function() {
-					self.doService(svc.enabled ? 'disable' : 'enable');
-				})
-			])
-		]));
 
 		self._secAdv.replaceChildren(sectionBox('高级（改后需重启服务生效）', kids));
 	},
