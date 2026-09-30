@@ -29,7 +29,7 @@ static void usage(void)
         "  playlist    build full M3U playlist\n"
         "  epg         build XMLTV EPG file\n"
         "  serve       run HTTP daemon (/status, playlist, epg, ...)\n"
-        "  status      print status lines (daemon state)\n"
+        "  status      print status lines (daemon state); --json for machine use\n"
         "  sign        print Authenticator hex for a challenge\n"
         "  selftest    offline golden vectors (CI)\n"
         "\n"
@@ -570,12 +570,21 @@ static int cmd_epg(void)
     return rc == 0 ? 0 : 1;
 }
 
-static int cmd_status(void)
+static int cmd_status(int argc, char **argv)
 {
+    int as_json = 0;
+    for (int i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "--json")) as_json = 1;
+        else {
+            fprintf(stderr, "status: unknown argument %s\n", argv[i]);
+            return 2;
+        }
+    }
     cache_load_disk();
     dbuf out;
     dbuf_init(&out);
-    status_page(&out);
+    if (as_json) status_json(&out);
+    else status_page(&out);
     fwrite(out.p, 1, out.len, stdout);
     dbuf_free(&out);
     return 0;
@@ -650,5 +659,5 @@ int main(int argc, char **argv)
     if (!strcmp(cmd, "playlist")) return cmd_playlist(argc - i, argv + i);
     if (!strcmp(cmd, "epg")) return cmd_epg();
     if (!strcmp(cmd, "serve")) return server_run() == 0 ? 0 : 1;
-    return cmd_status();
+    return cmd_status(argc - i, argv + i);
 }
