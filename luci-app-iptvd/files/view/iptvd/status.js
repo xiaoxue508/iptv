@@ -544,7 +544,7 @@ return view.extend({
 
 	refreshLog: function() {
 		var self = this;
-		return rpcLog({ 'lines': 60 }).then(function(r) {
+		return rpcLog(60).then(function(r) {
 			self._logLines = (r && r.lines) || [];
 			if (self._logOpen)
 				self.drawStatus();
@@ -561,7 +561,7 @@ return view.extend({
 		self.drawStatus();
 		var prevBuilt = (self._st && self._st.epg && self._st.epg.built_s != null)
 			? self._st.epg.built_s : null;
-		rpcAction({ 'name': name }).then(function(r) {
+		rpcAction(name).then(function(r) {
 			if (!(r && r.ok)) {
 				self._busy = false;
 				self.drawStatus();
@@ -628,7 +628,7 @@ return view.extend({
 		if (button)
 			button.disabled = true;
 		var prev = (self._st && self._st.uptime_s) || 0;
-		rpcService({ 'cmd': 'restart' }).then(function(r) {
+		rpcService('restart').then(function(r) {
 			if (!(r && r.ok)) {
 				self._busy = false;
 				if (button)
@@ -675,7 +675,7 @@ return view.extend({
 		var self = this;
 		if (confirmMsg && !confirm(confirmMsg))
 			return Promise.resolve();
-		return rpcService({ 'cmd': cmd }).then(function(r) {
+		return rpcService(cmd).then(function(r) {
 			if (r && r.ok) {
 				note('已执行：' + cmd, 'success');
 				return new Promise(function(resolve) {
@@ -1003,7 +1003,7 @@ return view.extend({
 		var self = this;
 		if (!confirm('用编辑器内容整体替换 /etc/iptvd.conf？'))
 			return;
-		rpcSetRaw({ 'raw': ta.value }).then(function(r) {
+		rpcSetRaw(ta.value).then(function(r) {
 			if (r && r.ok) {
 				note('原文已保存（重启服务后生效）。', 'success');
 				if (confirm('现在重启服务使其生效？'))
@@ -1045,7 +1045,7 @@ return view.extend({
 
 	commit: function(pairs, label) {
 		var self = this;
-		return rpcSetConfig({ 'pairs': pairs }).then(function(r) {
+		return rpcSetConfig(pairs).then(function(r) {
 			if (r && r.ok) {
 				note(label + '已保存，重启服务后生效。', 'success');
 				return self.reload().then(function() {
