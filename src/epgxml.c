@@ -398,21 +398,37 @@ done:
     return rc;
 }
 
-void epgxml_worker_once(void)
+static volatile int epg_kick;
+
+void epgxml_kick(void)
+{
+    epg_kick = 1;
+}
+
+static void worker_once(int force)
 {
     struct stat st;
     int fresh = stat(g.epg_file, &st) == 0 &&
                 (long)(now_sec() - st.st_mtime) < g.ttl_epg;
-    if (fresh) return;
+    if (fresh && !force) return;
     int rc = epgxml_build();
     if (rc >= 0) epgxml_mark_ready();
     else logmsg("epg_worker error: build failed (rc=%d)", rc);
 }
 
+void epgxml_worker_once(void)
+{
+    worker_once(0);
+}
+
 void epgxml_worker_loop(void)
 {
     for (;;) {
-        epgxml_worker_once();
-        sleep(g.worker_s > 0 ? g.worker_s : 120);
+        int kick = epg_kick;
+        epg_kick = 0;
+        worker_once(kick);
+        /* sleep in 1s slices so an action kick is noticed within a second */
+        int wait = g.worker_s > 0 ? g.worker_s : 120;
+        while (wait-- > 0 && !epg_kick) sleep(1);
     }
 }

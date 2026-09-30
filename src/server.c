@@ -43,6 +43,7 @@ static const char *reason(int code)
     case 200: return "OK";
     case 302: return "Found";
     case 400: return "Bad Request";
+    case 403: return "Forbidden";
     case 404: return "Not Found";
     case 500: return "Internal Server Error";
     case 501: return "Unsupported method";
@@ -111,7 +112,8 @@ static char *qget(const char *query, const char *key)
 
 /* ---------------- routing (srcbox_bridge.Handler.route) ------------------- */
 
-static void route(int fd, int head, const char *path, const char *query)
+static void route(int fd, int head, const char *path, const char *query,
+                  int loopback)
 {
     dbuf body;
     dbuf_init(&body);
@@ -169,6 +171,32 @@ static void route(int fd, int head, const char *path, const char *query)
         free(ch);
         free(s);
         free(u);
+    } else if (!strcmp(path, "/api")) {
+        /* local control endpoint for luci-app-iptvd (loopback only) */
+        ctype = "application/json; charset=utf-8";
+        if (!loopback) {
+            code = 403;
+            dbuf_add(&body, "{\"ok\":0,\"error\":\"loopback only\"}");
+        } else {
+            char *act = qget(query, "action");
+            if (!act) {
+                code = 400;
+                dbuf_add(&body, "{\"ok\":0,\"error\":\"missing action\"}");
+            } else if (!strcmp(act, "relogin")) {
+                int rc = cache_ensure_session();
+                dbuf_addf(&body, "{\"ok\":%d}", rc == 0 ? 1 : 0);
+            } else if (!strcmp(act, "refresh")) {
+                int rc = cache_refresh_channels(1);
+                dbuf_addf(&body, "{\"ok\":%d}", rc == 1 ? 1 : 0);
+            } else if (!strcmp(act, "epg")) {
+                epgxml_kick();
+                dbuf_add(&body, "{\"ok\":1,\"accepted\":1}");
+            } else {
+                code = 400;
+                dbuf_add(&body, "{\"ok\":0,\"error\":\"unknown action\"}");
+            }
+            free(act);
+        }
     } else {
         code = 404;
         dbuf_add(&body, "not found");
@@ -193,6 +221,15 @@ static int read_request(int fd, char *buf, size_t cap)
         if (strstr(buf, "\r\n\r\n") || strstr(buf, "\n\n")) break;
     }
     return (int)n;
+}
+
+static int conn_is_loopback(int fd)
+{
+    struct sockaddr_in sa;
+    socklen_t sl = sizeof sa;
+    if (getpeername(fd, (struct sockaddr *)&sa, &sl) != 0) return 0;
+    return sa.sin_family == AF_INET &&
+           ntohl(sa.sin_addr.s_addr) == INADDR_LOOPBACK;
 }
 
 static void handle_conn(int fd)
@@ -222,7 +259,7 @@ static void handle_conn(int fd)
         dbuf_free(&b);
         return;
     }
-    route(fd, head, target, query);
+    route(fd, head, target, query, conn_is_loopback(fd));
 }
 
 static void *conn_thread(void *arg)

@@ -69,6 +69,8 @@ static void set_kv(const char *key, const char *val)
     else if (!strcmp(key, "auth_key")) SETSTR(auth_key, val);
     else if (!strcmp(key, "stbtype")) SETSTR(stbtype, val);
     else if (!strcmp(key, "stbversion")) SETSTR(stbversion, val);
+    else if (!strcmp(key, "ua")) SETSTR(ua, val);
+    else if (!strcmp(key, "xhr")) SETSTR(xhr, val);
     else if (!strcmp(key, "timeout")) g.timeout = atoi(val);
     else if (!strcmp(key, "r2h")) SETSTR(r2h, val);
     else if (!strcmp(key, "m3u_epg_url")) SETSTR(m3u_epg_url, val);
@@ -115,6 +117,32 @@ int conf_load(const char *path)
     }
     fclose(f);
     return 0;
+}
+
+static const char *const conf_keys[] = {
+    "eas_host", "epg_host", "userid", "stbid", "stbip", "stbmac", "auth_key",
+    "stbtype", "stbversion", "ua", "xhr", "timeout", "r2h", "m3u_epg_url",
+    "bridge_tpl", "gen_url", "ttl_progs", "ttl_tvod", "ttl_epg",
+    "ttl_channels", "min_channels", "epg_past", "epg_future", "worker_s",
+    "port", "xmltv_wait_s", "upstream_interface", "data_dir", "cache_dir",
+    "session", "channels", "epg_file", NULL
+};
+
+int conf_valid_key(const char *key)
+{
+    for (int i = 0; conf_keys[i]; i++)
+        if (!strcmp(conf_keys[i], key)) return 1;
+    return 0;
+}
+
+int conf_key_is_num(const char *key)
+{
+    return !strcmp(key, "timeout") || !strcmp(key, "ttl_progs") ||
+           !strcmp(key, "ttl_tvod") || !strcmp(key, "ttl_epg") ||
+           !strcmp(key, "ttl_channels") || !strcmp(key, "min_channels") ||
+           !strcmp(key, "epg_past") || !strcmp(key, "epg_future") ||
+           !strcmp(key, "worker_s") || !strcmp(key, "port") ||
+           !strcmp(key, "xmltv_wait_s");
 }
 
 void conf_resolve_paths(void)

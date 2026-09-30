@@ -31,6 +31,7 @@ static void usage(void)
         "  epg         build XMLTV EPG file\n"
         "  serve       run HTTP daemon (/status, playlist, epg, ...)\n"
         "  status      print status lines (daemon state); --json for machine use\n"
+        "  config      print conf as JSON; 'config set k=v ...' / 'config write FILE' update\n"
         "  sign        print Authenticator hex for a challenge\n"
         "  selftest    offline golden vectors (CI)\n"
         "\n"
@@ -591,6 +592,258 @@ static int cmd_status(int argc, char **argv)
     return 0;
 }
 
+/* ---------------- config (conf file dump/merge for luci-app-iptvd) ------- */
+
+static int is_integer(const char *s)
+{
+    if (!*s) return 0;
+    if (*s == '-') s++;
+    if (!*s) return 0;
+    for (; *s; s++)
+        if (*s < '0' || *s > '9') return 0;
+    return 1;
+}
+
+/* trim a raw line into a buffer, return 1 when it carries key=value */
+static int line_key(const char *s, size_t l, char *kb, size_t kbsz)
+{
+    while (l && (*s == ' ' || *s == '\t')) { s++; l--; }
+    while (l && (s[l - 1] == ' ' || s[l - 1] == '\t' || s[l - 1] == '\r')) l--;
+    if (!l || *s == '#' || *s == ';') return 0;
+    const char *eq = memchr(s, '=', l);
+    if (!eq) return 0;
+    size_t klen = (size_t)(eq - s);
+    while (klen && (s[klen - 1] == ' ' || s[klen - 1] == '\t')) klen--;
+    if (!klen || klen + 1 > kbsz) return 0;
+    memcpy(kb, s, klen);
+    kb[klen] = 0;
+    return 1;
+}
+
+/* whole-file sanity check: every non-comment line needs key=value, integer
+   keys need integer values. Unknown keys pass (forward compatible, like
+   conf_load). Prints "config: line N: ..." and returns -1 on the first bad
+   line — callers must not write the file in that case. */
+static int conf_validate_text(const char *text)
+{
+    int lineno = 0;
+    const char *p = text ? text : "";
+    while (*p) {
+        const char *nl = strchr(p, '\n');
+        size_t len = nl ? (size_t)(nl - p) : strlen(p);
+        lineno++;
+        char kb[128];
+        if (line_key(p, len, kb, sizeof kb)) {
+            const char *eq = memchr(p, '=', len);
+            const char *val = eq + 1;
+            size_t vl = (size_t)(p + len - val);
+            while (vl && (*val == ' ' || *val == '\t')) { val++; vl--; }
+            while (vl && (val[vl - 1] == ' ' || val[vl - 1] == '\t' ||
+                          val[vl - 1] == '\r')) vl--;
+            char vbuf[512];
+            if (vl >= sizeof vbuf) {
+                fprintf(stderr, "config: line %d: value too long\n", lineno);
+                return -1;
+            }
+            memcpy(vbuf, val, vl);
+            vbuf[vl] = 0;
+            /* inline comment " # ..." like conf_load strips */
+            char *hash = strstr(vbuf, " #");
+            if (hash) { *hash = 0; while (hash > vbuf && (hash[-1] == ' ' || hash[-1] == '\t')) *--hash = 0; }
+            if (conf_key_is_num(kb) && !is_integer(vbuf)) {
+                fprintf(stderr, "config: line %d: %s must be an integer\n",
+                        lineno, kb);
+                return -1;
+            }
+        } else {
+            const char *s = p; size_t l = len;
+            while (l && (*s == ' ' || *s == '\t')) { s++; l--; }
+            while (l && (s[l - 1] == ' ' || s[l - 1] == '\t' || s[l - 1] == '\r')) l--;
+            if (l && *s != '#' && *s != ';') {
+                fprintf(stderr, "config: line %d: expected key=value\n", lineno);
+                return -1;
+            }
+        }
+        if (!nl) break;
+        p = nl + 1;
+    }
+    return 0;
+}
+
+/* merge key=val into conf text: replace the first matching line (drop any
+   later duplicates so conf_load's last-wins can't resurrect them), else
+   append. Always returns a fresh malloc'd buffer. */
+static char *conf_merge_kv(const char *raw, const char *key, const char *val)
+{
+    dbuf out;
+    dbuf_init(&out);
+    int found = 0;
+    const char *p = raw ? raw : "";
+    while (*p) {
+        const char *nl = strchr(p, '\n');
+        size_t len = nl ? (size_t)(nl - p) : strlen(p);
+        char kb[128];
+        if (line_key(p, len, kb, sizeof kb) && !strcmp(kb, key)) {
+            if (!found) {
+                dbuf_addf(&out, "%s=%s", key, val);
+                if (nl) dbuf_addc(&out, '\n');
+                found = 1;
+            }
+            /* later duplicate: drop (conf_load is last-wins) */
+        } else {
+            dbuf_addn(&out, p, len);
+            if (nl) dbuf_addc(&out, '\n');
+        }
+        if (!nl) break;
+        p = nl + 1;
+    }
+    if (!found) {
+        if (out.len && out.p && out.p[out.len - 1] != '\n') dbuf_addc(&out, '\n');
+        dbuf_addf(&out, "%s=%s\n", key, val);
+    }
+    if (!out.p) out.p = xstrdup("");
+    return out.p;
+}
+
+static int cmd_config(int argc, char **argv, const char *path)
+{
+    if (argc == 0) {
+        jv *o = jobj();
+        char num[32];
+#define KS(k, v) jobj_set(o, k, jstr(v))
+#define KN(k, v) do { snprintf(num, sizeof num, "%d", (int)(v)); \
+                      jobj_set(o, k, jnum(num)); } while (0)
+        KS("eas_host", g.eas_host);
+        KS("epg_host", g.epg_host);
+        KS("userid", g.userid);
+        KS("stbid", g.stbid);
+        KS("stbip", g.stbip_auto ? "auto" : g.stbip);
+        KS("stbmac", g.stbmac);
+        KS("auth_key", g.auth_key);
+        KS("stbtype", g.stbtype);
+        KS("stbversion", g.stbversion);
+        KS("ua", g.ua);
+        KS("xhr", g.xhr);
+        KN("timeout", g.timeout);
+        KS("r2h", g.r2h);
+        KS("m3u_epg_url", g.m3u_epg_url);
+        KS("bridge_tpl", g.bridge_tpl);
+        KS("gen_url", g.gen_url);
+        KN("ttl_progs", g.ttl_progs);
+        KN("ttl_tvod", g.ttl_tvod);
+        KN("ttl_epg", g.ttl_epg);
+        KN("ttl_channels", g.ttl_channels);
+        KN("min_channels", g.min_channels);
+        KN("epg_past", g.epg_past);
+        KN("epg_future", g.epg_future);
+        KN("worker_s", g.worker_s);
+        KN("port", g.port);
+        KN("xmltv_wait_s", g.xmltv_wait_s);
+        KS("upstream_interface", g.upstream_interface);
+        KS("data_dir", g.data_dir);
+        KS("cache_dir", g.cache_dir);
+        KS("session", g.session);
+        KS("channels", g.channels);
+        KS("epg_file", g.epg_file);
+#undef KS
+#undef KN
+        char *s = json_dump_str(o, -1);
+        jv_free(o);
+        puts(s);
+        free(s);
+        return 0;
+    }
+
+    if (!strcmp(argv[0], "set")) {
+        if (argc < 2) {
+            fprintf(stderr, "config set: expected key=value\n");
+            return 2;
+        }
+        for (int i = 1; i < argc; i++) {
+            const char *kv = argv[i];
+            const char *eq = strchr(kv, '=');
+            if (!eq) {
+                fprintf(stderr, "config set: expected key=value: %s\n", kv);
+                return 2;
+            }
+            size_t klen = (size_t)(eq - kv);
+            if (!klen || klen >= 128) {
+                fprintf(stderr, "config set: bad key\n");
+                return 2;
+            }
+            char key[128];
+            memcpy(key, kv, klen);
+            key[klen] = 0;
+            const char *val = eq + 1;
+            if (strchr(val, '\n') || strchr(val, '\r')) {
+                fprintf(stderr, "config set: value must be single-line\n");
+                return 2;
+            }
+            if (!conf_valid_key(key)) {
+                fprintf(stderr, "config set: unknown key '%s'\n", key);
+                return 2;
+            }
+            if (conf_key_is_num(key) && !is_integer(val)) {
+                fprintf(stderr, "config set: %s must be an integer\n", key);
+                return 2;
+            }
+        }
+        size_t len;
+        char *raw = read_file(path, &len);
+        char *acc = raw ? raw : xstrdup("");
+        for (int i = 1; i < argc; i++) {
+            const char *eq = strchr(argv[i], '=');
+            char key[128];
+            size_t klen = (size_t)(eq - argv[i]);
+            memcpy(key, argv[i], klen);
+            key[klen] = 0;
+            char *m = conf_merge_kv(acc, key, eq + 1);
+            free(acc);
+            acc = m;
+        }
+        if (conf_validate_text(acc) != 0) {
+            free(acc);
+            return 1;
+        }
+        if (write_atomic(path, acc, strlen(acc)) != 0) {
+            fprintf(stderr, "config set: write %s failed\n", path);
+            free(acc);
+            return 1;
+        }
+        free(acc);
+        puts("ok");
+        return 0;
+    }
+
+    if (!strcmp(argv[0], "write")) {
+        if (argc != 2) {
+            fprintf(stderr, "config write: expected SOURCE file\n");
+            return 2;
+        }
+        size_t len;
+        char *src = read_file(argv[1], &len);
+        if (!src) {
+            fprintf(stderr, "config write: cannot read %s\n", argv[1]);
+            return 1;
+        }
+        if (conf_validate_text(src) != 0) {
+            free(src);
+            return 1;
+        }
+        if (write_atomic(path, src, strlen(src)) != 0) {
+            fprintf(stderr, "config write: write %s failed\n", path);
+            free(src);
+            return 1;
+        }
+        free(src);
+        puts("ok");
+        return 0;
+    }
+
+    fprintf(stderr, "config: unknown argument %s\n", argv[0]);
+    return 2;
+}
+
 /* ------------------------------------------------------------------------ */
 
 int main(int argc, char **argv)
@@ -634,6 +887,7 @@ int main(int argc, char **argv)
 
     if (!strcmp(cmd, "selftest")) return selftest();
     if (!strcmp(cmd, "sign")) return cmd_sign(argc - i, argv + i);
+    if (!strcmp(cmd, "config")) return cmd_config(argc - i, argv + i, config);
 
     if (strcmp(cmd, "login") && strcmp(cmd, "channels") &&
         strcmp(cmd, "programs") && strcmp(cmd, "tvod") &&

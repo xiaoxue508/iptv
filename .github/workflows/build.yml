@@ -21,6 +21,10 @@ jobs:
           got=$(./src/iptvd sign --challenge X --rnd 00000000)
           want="DBEFF291C6F9F336A46CF3AAA6F601CEA86ADCB22E8A904520956AF9BB50E299F17CF5328ECFA05FC69D1F33C6E26844A10A8645A3A9529A67A2D683503EB4587747AA5DE3D5C653FD612A6794BFCC7F481F6E5683E60014"
           [ "$got" = "$want" ]
+      - name: luci JS + rpcd shell syntax check
+        run: |
+          node --check luci-app-iptvd/files/view/iptvd/status.js
+          sh -n luci-app-iptvd/files/rpcd/iptvd
 
   build-ipk:
     runs-on: ubuntu-latest

@@ -1,9 +1,14 @@
 {
 	"luci-app-iptvd": {
-		"description": "Allow reading iptvd service status",
+		"description": "Allow reading and controlling the iptvd service",
 		"read": {
 			"ubus": {
-				"iptvd": [ "status" ]
+				"iptvd": [ "status", "get_config", "get_raw", "log", "uplink", "service" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"iptvd": [ "set_config", "set_raw", "action", "service" ]
 			}
 		}
 	}

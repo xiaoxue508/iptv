@@ -461,7 +461,7 @@ static size_t chan_count_of(const jv *data)
 
 int cache_refresh_channels(int force)
 {
-    if (g.ttl_channels <= 0) return 0;
+    if (g.ttl_channels <= 0 && !force) return 0;
     int refreshed = 0;
 
     pthread_mutex_lock(&refresh_lock);

@@ -1,20 +1,170 @@
 #!/bin/sh
-# rpcd exec plugin: ubus object "iptvd", method "status"
-# Queries the LIVE serve daemon via /status.json. Running the CLI here would
-# report this throwaway process instead (uptime 0 / no session / not ready).
-# stdout must be exactly one JSON value.
+# rpcd exec plugin: ubus object "iptvd" (luci-app-iptvd)
+# Contract (rpcd plugin.c): argv = "path call method", the ubus input object
+# arrives as JSON on stdin, stdout must be exactly one JSON object.
+#
+# Methods:
+#   status                  -> live serve /status.json
+#   get_config              -> "iptvd config" JSON dump of /etc/iptvd.conf
+#   get_raw                 -> {"raw": "<file text>"}
+#   set_config {pairs:[k=v]}-> validate+merge via "iptvd config set"
+#   set_raw {raw:"..."}     -> validate+replace via "iptvd config write"
+#   action {name:...}       -> loopback /api?action=relogin|refresh|epg
+#   service {cmd:...}       -> /etc/init.d/iptvd start|stop|restart|enable|
+#                              disable|status
+#   log {lines:N}           -> last N iptvd lines from syslog
+#   uplink                  -> ip rule/table snapshot
+
+CONF=/etc/iptvd.conf
+JSHN=/usr/share/libubox/jshn.sh
+
+port() {
+	p="$(sed -n 's/^port[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$CONF" 2>/dev/null | head -n1)"
+	[ -n "$p" ] || p=5150
+	echo "$p"
+}
+
+fail_json() {
+	. "$JSHN"
+	json_init
+	json_add_boolean "ok" 0
+	json_add_string "error" "${1:-unknown error}"
+	json_dump
+	echo
+}
+
+in_get() {
+	printf '%s' "$INPUT" | jsonfilter -q -e "$1" 2>/dev/null
+}
 
 case "$1" in
 list)
-	echo '{"status": {}}'
+	cat <<'EOF'
+{"status":{},"get_config":{},"get_raw":{},"set_config":{"pairs":"array"},"set_raw":{"raw":"string"},"action":{"name":"string"},"service":{"cmd":"string"},"log":{"lines":"integer"},"uplink":{}}
+EOF
 	;;
 call)
+	INPUT="$(cat)"
 	case "$2" in
 	status)
-		port="$(sed -n 's/^port[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' /etc/iptvd.conf 2>/dev/null | head -n1)"
-		[ -n "$port" ] || port=5150
-		wget -q -T 5 -O - "http://127.0.0.1:${port}/status.json" 2>/dev/null || echo '{}'
+		wget -q -T 12 -O - "http://127.0.0.1:$(port)/status.json" 2>/dev/null ||
+			echo '{"ok":0,"error":"serve unreachable"}'
+		;;
+	get_config)
+		if out="$(iptvd config 2>/dev/null)" && [ -n "$out" ]; then
+			printf '%s\n' "$out"
+		else
+			fail_json "iptvd config failed"
+		fi
+		;;
+	get_raw)
+		. "$JSHN"
+		json_init
+		json_add_string "raw" "$(cat "$CONF" 2>/dev/null)"
+		json_dump
+		echo
+		;;
+	set_config)
+		pairs="$(in_get '@.pairs[*]')"
+		[ -n "$pairs" ] || { fail_json "no pairs"; exit 0; }
+		set -f
+		sIFS="$IFS"
+		IFS='
+'
+		set --
+		for kv in $pairs; do set -- "$@" "$kv"; done
+		IFS="$sIFS"
+		set +f
+		if err="$(iptvd config set "$@" 2>&1 >/dev/null)"; then
+			echo '{"ok":1}'
+		else
+			fail_json "${err:-config set failed}"
+		fi
+		;;
+	set_raw)
+		raw="$(in_get '@.raw')"
+		if [ -z "$raw" ]; then
+			fail_json "empty config rejected"
+			exit 0
+		fi
+		tmp="$(mktemp)" || { fail_json "mktemp failed"; exit 0; }
+		printf '%s' "$raw" >"$tmp"
+		if err="$(iptvd config write "$tmp" 2>&1 >/dev/null)"; then
+			echo '{"ok":1}'
+		else
+			fail_json "${err:-config write failed}"
+		fi
+		rm -f "$tmp"
+		;;
+	action)
+		name="$(in_get '@.name')"
+		case "$name" in
+		relogin | refresh | epg) ;;
+		*) fail_json "unknown action"; exit 0 ;;
+		esac
+		wget -q -T 15 -O - "http://127.0.0.1:$(port)/api?action=${name}" 2>/dev/null ||
+			fail_json "serve unreachable"
+		;;
+	service)
+		cmd="$(in_get '@.cmd')"
+		case "$cmd" in
+		start | stop | restart)
+			(/etc/init.d/iptvd "$cmd" >/dev/null 2>&1 &)
+			echo '{"ok":1}'
+			;;
+		enable | disable)
+			if err="$(/etc/init.d/iptvd "$cmd" 2>&1)"; then
+				echo '{"ok":1}'
+			else
+				fail_json "${err:-init failed}"
+			fi
+			;;
+		status)
+			en=0
+			run=0
+			/etc/init.d/iptvd enabled >/dev/null 2>&1 && en=1
+			pidof iptvd >/dev/null 2>&1 && run=1
+			. "$JSHN"
+			json_init
+			json_add_boolean "enabled" "$en"
+			json_add_boolean "running" "$run"
+			json_dump
+			echo
+			;;
+		*) fail_json "unknown service cmd" ;;
+		esac
+		;;
+	log)
+		n="$(in_get '@.lines')"
+		case "$n" in '' | *[!0-9]*) n=40 ;; esac
+		[ "$n" -ge 5 ] 2>/dev/null || n=5
+		[ "$n" -le 200 ] 2>/dev/null || n=200
+		# -e filters the message text only (not the daemon tag), so filter
+		# on the "iptvd[pid]:" metadata instead
+		logread -l 400 2>/dev/null | grep 'iptvd\[' | tail -n "$n" | {
+			. "$JSHN"
+			json_init
+			json_add_array "lines"
+			while IFS= read -r l; do json_add_string "" "$l"; done
+			json_close_array
+			json_dump
+			echo
+		}
+		;;
+	uplink)
+		. "$JSHN"
+		json_init
+		json_add_string "rule" "$(ip rule show pref 1000 2>/dev/null)"
+		json_add_string "table" "$(ip route show table 1001 2>/dev/null)"
+		json_dump
+		echo
+		;;
+	*)
+		fail_json "unknown method"
 		;;
 	esac
+	;;
+*)
+	echo '{"ok":0,"error":"bad invocation"}'
 	;;
 esac

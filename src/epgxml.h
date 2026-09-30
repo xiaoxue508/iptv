@@ -10,6 +10,8 @@ int epgxml_build(void);
 void epgxml_worker_once(void);
 /* infinite loop: worker_once + sleep(worker_s) — run in a thread */
 void epgxml_worker_loop(void);
+/* ask the worker to rebuild on its next pass (LuCI "重建XMLTV" action) */
+void epgxml_kick(void);
 
 /* ready = serve /epg.xml without waiting */
 int epgxml_ready(void);

@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-iptvd
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -16,8 +16,10 @@ define Package/luci-app-iptvd
 endef
 
 define Package/luci-app-iptvd/description
-  LuCI menu entry, client-side status view and rpcd exec plugin
-  exposing "iptvd status --json" as ubus object "iptvd".
+  LuCI control panel for iptvd: status dashboard with alerts, log tail and
+  action buttons (relogin/refresh/EPG rebuild/restart), account & upstream
+  interface forms, TTL settings and a raw config editor, backed by a rpcd
+  exec plugin exposing ubus object "iptvd".
 endef
 
 define Build/Prepare

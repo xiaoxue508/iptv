@@ -67,5 +67,7 @@ extern conf_t g;
 void conf_defaults(void);
 int conf_load(const char *path);
 void conf_resolve_paths(void);
+int conf_valid_key(const char *key);   /* known conf keys (set whitelist) */
+int conf_key_is_num(const char *key);  /* integer-valued conf keys */
 
 #endif
