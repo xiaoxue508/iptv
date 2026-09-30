@@ -270,6 +270,8 @@ int epgxml_build(void)
     building = 1;
     pthread_mutex_unlock(&b_lock);
 
+    cache_purge_old();
+
     int rc = 0;
     double t0 = now_d();
     idx_ent *idx = NULL;

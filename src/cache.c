@@ -166,6 +166,29 @@ static size_t g_pn, g_pcap;
 
 static long prog_find(const char *key);
 
+/* Keep today-(PROG_KEEP_DAYS-1)..today+epg_future program dates. XMLTV only
+   needs today-1 and older catchup dates refetch on demand from the platform;
+   the python bridge never prunes but the router has ~35MB RAM and /tmp is
+   tmpfs (files ARE ram), so unbounded growth re-arms the OOM killer. */
+#define PROG_KEEP_DAYS 3
+
+static void prog_cutoff_ymd(char out[9])
+{
+    strftime8(out, 9, "%Y%m%d", now_sec() - (time_t)PROG_KEEP_DAYS * 86400);
+}
+
+/* key date part "YYYY.MM.DD" -> "YYYYMMDD"; 0 = malformed */
+static int prog_key_ymd(const char *key, char out[9])
+{
+    const char *bar = strchr(key, '|');
+    if (!bar) return 0;
+    size_t j = 0;
+    for (const char *p = bar + 1; *p && j < 8; p++)
+        if (*p != '.') out[j++] = *p;
+    out[j] = 0;
+    return j == 8;
+}
+
 static jv *parse_progs_text(const char *t)
 {
     if (!t) return NULL;
@@ -262,6 +285,8 @@ static void prog_disk_write(const char *uid, const char *date, long fetched,
 
 void cache_load_disk(void)
 {
+    char cut[9];
+    prog_cutoff_ymd(cut);
     DIR *d = opendir(g.cache_dir);
     if (!d) return;
     struct dirent *e;
@@ -277,6 +302,12 @@ void cache_load_disk(void)
         char ymd[9];
         memcpy(ymd, stem + sn - 8, 8);
         ymd[8] = 0;
+        if (strcmp(ymd, cut) < 0) {          /* rotated out: free the tmpfs */
+            char old[320];
+            snprintf(old, sizeof old, "%s/%s", g.cache_dir, e->d_name);
+            unlink(old);
+            continue;
+        }
         char uid[64];
         size_t ul = sn - 9;
         if (ul == 0 || ul >= sizeof uid) continue;
@@ -314,6 +345,43 @@ size_t cache_progs_count(void)
     size_t n = g_pn;
     pthread_mutex_unlock(&prog_lock);
     return n;
+}
+
+/* drop aged entries from memory AND unlink their tmpfs files; called on
+   every XMLTV build (>= hourly) so long uptimes stay bounded too */
+void cache_purge_old(void)
+{
+    char cut[9];
+    prog_cutoff_ymd(cut);
+
+    pthread_mutex_lock(&prog_lock);
+    for (size_t i = 0; i < g_pn; ) {
+        char ymd[9];
+        if (prog_key_ymd(g_pe[i].key, ymd) && strcmp(ymd, cut) < 0) {
+            free(g_pe[i].pj);
+            g_pe[i] = g_pe[--g_pn];
+            continue;
+        }
+        i++;
+    }
+    pthread_mutex_unlock(&prog_lock);
+
+    DIR *d = opendir(g.cache_dir);
+    if (!d) return;
+    struct dirent *e;
+    while ((e = readdir(d))) {
+        size_t n = strlen(e->d_name);
+        if (n < 14 || strcmp(e->d_name + n - 5, ".json")) continue;
+        char ymd[9];
+        memcpy(ymd, e->d_name + n - 13, 8);
+        ymd[8] = 0;
+        if (strcmp(ymd, cut) < 0) {
+            char path[320];
+            snprintf(path, sizeof path, "%s/%s", g.cache_dir, e->d_name);
+            unlink(path);
+        }
+    }
+    closedir(d);
 }
 
 /* channel uid -> ChannelID; owned string or NULL */

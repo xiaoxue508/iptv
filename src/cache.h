@@ -18,6 +18,7 @@ int cache_refresh_channels(int force); /* srcbox_bridge.refresh_channels; 0 = re
 jv *cache_get_programs(const char *uid, const char *date,
                        int allow_stale, int retry_login);
 void cache_load_disk(void);
+void cache_purge_old(void);       /* drop entries/files older than keep window */
 size_t cache_progs_count(void);
 
 /* ---- tvod rtsp cache (TTL_TOD) ---- */
