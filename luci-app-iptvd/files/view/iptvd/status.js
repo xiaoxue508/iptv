@@ -36,6 +36,136 @@ var NUMRANGE = {
 	'port': [1024, 65535]
 };
 
+/* ---------------------------------------------------------------- styling */
+
+var CSS = [
+	'.iptvd{--accent:#5a67f8;--ring:rgba(90,103,248,.22);--card:#fff;--bg:#f6f7fb;',
+	'--line:#e7e8f0;--fg:#1b1d26;--fg2:#5c6070;--fg3:#8b90a3;--input:#fff;',
+	'--shadow:0 1px 3px rgba(18,20,60,.07);color:var(--fg);font-size:13.5px}',
+	'.iptvd.dark{--card:#1e2129;--bg:#15171d;--line:#31353f;--fg:#e7e9ef;',
+	'--fg2:#a1a7b6;--fg3:#7d8494;--input:#242730;--shadow:0 1px 3px rgba(0,0,0,.4)}',
+
+	'.iptvd .ip-page{background:var(--bg);border:1px solid var(--line);border-radius:14px;',
+	'padding:18px 20px 24px;margin-top:20px;box-shadow:var(--shadow);overflow:hidden}',
+
+	'.iptvd .ip-tabs{display:flex;gap:6px;padding:5px;background:rgba(122,126,152,.14);',
+	'border-radius:12px;width:max-content;max-width:100%;flex-wrap:wrap;margin-bottom:18px}',
+	'.iptvd .ip-tab{border:0;outline:0;background:transparent;color:var(--fg2);',
+	'padding:9px 20px;border-radius:9px;font-size:14px;font-weight:500;cursor:pointer;',
+	'transition:background .15s,color .15s,box-shadow .15s}',
+	'.iptvd .ip-tab:hover{color:var(--fg);background:rgba(255,255,255,.6)}',
+	'.iptvd.dark .ip-tab:hover{background:rgba(255,255,255,.07)}',
+	'.iptvd .ip-tab.on{background:var(--card);color:var(--accent);font-weight:650;',
+	'box-shadow:0 1px 5px rgba(10,12,50,.18)}',
+
+	'.iptvd .ip-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:14px}',
+	'.iptvd .ip-card{background:var(--card);border:1px solid var(--line);border-radius:10px;',
+	'padding:13px 16px 12px;box-shadow:var(--shadow)}',
+	'.iptvd .ip-card h5{display:flex;align-items:center;gap:8px;margin:0 0 8px;',
+	'font-size:13px;font-weight:650;color:var(--accent);letter-spacing:.02em}',
+	'.iptvd .ip-card h5::before{content:"";width:3px;height:13px;border-radius:3px;background:var(--accent)}',
+	'.iptvd .ip-card table{width:100%;border-collapse:collapse}',
+	'.iptvd .ip-card td{border-bottom:1px dashed var(--line);padding:7px 0;font-size:13px;vertical-align:top}',
+	'.iptvd .ip-card tr:last-child td{border-bottom:0;padding-bottom:2px}',
+	'.iptvd .ip-card td:first-child{color:var(--fg2);white-space:nowrap;width:44%}',
+	'.iptvd .ip-card td:last-child{text-align:right;font-weight:550;word-break:break-all}',
+	'.iptvd .ip-chip{display:inline-block;padding:3px 11px;border-radius:999px;',
+	'background:var(--ring);color:var(--accent);text-decoration:none;font-size:12px;font-weight:650}',
+	'.iptvd .ip-chip:hover{filter:brightness(.94)}',
+
+	'.iptvd .ip-sec{background:var(--card);border:1px solid var(--line);border-radius:10px;',
+	'padding:16px 20px 20px;box-shadow:var(--shadow);margin-bottom:16px}',
+	'.iptvd .ip-sec h4{margin:0 0 14px;padding-bottom:11px;border-bottom:1px solid var(--line);',
+	'font-size:15px;font-weight:650;letter-spacing:.01em}',
+	'.iptvd .ip-sec h5{margin:16px 0 10px;font-size:12px;font-weight:700;',
+	'color:var(--fg3);letter-spacing:.08em}',
+	'.iptvd .ip-sec h5:first-child{margin-top:0}',
+
+	'.iptvd .ip-field{display:grid;grid-template-columns:172px minmax(0,1fr);gap:12px 16px;',
+	'align-items:start;margin-bottom:11px;max-width:880px}',
+	'.iptvd .ip-field>label{padding-top:8px;font-size:13px;color:var(--fg2)}',
+	'.iptvd .ip-input{display:block;width:100%;max-width:600px;box-sizing:border-box;',
+	'padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--input);',
+	'color:var(--fg);font-size:13.5px;font-family:inherit;',
+	'transition:border-color .15s,box-shadow .15s}',
+	'.iptvd .ip-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}',
+	'.iptvd .ip-hint{margin-top:5px;font-size:12px;color:var(--fg3);line-height:1.55}',
+	'.iptvd select.ip-input{max-width:380px}',
+	'.iptvd .ip-input[readonly]{background:rgba(127,127,127,.08);color:var(--fg2);cursor:default}',
+	'.iptvd .ip-input:disabled{opacity:.5}',
+
+	'.iptvd .ip-radio{display:flex;gap:16px;flex-wrap:wrap;align-items:center;',
+	'padding-top:7px;font-size:13.5px}',
+	'.iptvd .ip-radio label{display:inline-flex;align-items:center;gap:7px;cursor:pointer}',
+	'.iptvd .ip-radio input[type=radio]{accent-color:var(--accent);width:15px;height:15px}',
+	'.iptvd .ip-radio .ip-input{max-width:210px;padding:6px 9px}',
+
+	'.iptvd .ip-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:16px}',
+	'.iptvd .ip-btn{border:1px solid var(--line);background:var(--card);color:var(--fg);',
+	'padding:8px 16px;border-radius:8px;font-size:13.5px;font-weight:550;cursor:pointer;',
+	'transition:.15s;box-shadow:0 1px 2px rgba(15,15,50,.05)}',
+	'.iptvd .ip-btn:hover{border-color:var(--accent);color:var(--accent)}',
+	'.iptvd .ip-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}',
+	'.iptvd .ip-btn.primary:hover{filter:brightness(1.08);color:#fff}',
+	'.iptvd .ip-btn.danger{color:#e5484d;border-color:rgba(229,72,77,.45)}',
+	'.iptvd .ip-btn.danger:hover{background:rgba(229,72,77,.09);color:#e5484d}',
+	'.iptvd .ip-btn:disabled{opacity:.45;pointer-events:none}',
+
+	'.iptvd .ip-pre{margin:0;padding:6px 9px;background:rgba(127,127,127,.09);border-radius:6px;',
+	'font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;',
+	'word-break:break-all;color:var(--fg2);user-select:text}',
+	'.iptvd .ip-ta{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12.5px;',
+	'min-height:280px;max-width:100%;line-height:1.6;resize:vertical}',
+
+	'.iptvd .ip-log{margin-top:10px;max-height:340px;overflow:auto;background:#12151c;',
+	'color:#cfd6e6;padding:12px 14px;border-radius:9px;border:1px solid rgba(255,255,255,.07);',
+	'font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;',
+	'word-break:break-all;user-select:text}',
+
+	'.iptvd .ip-danger{margin-top:22px;border:1px dashed rgba(229,72,77,.5);',
+	'background:rgba(229,72,77,.05);border-radius:10px;padding:14px 16px 16px}',
+	'.iptvd .ip-danger h5{margin:0 0 4px;color:#e5484d;font-size:13px;letter-spacing:0}',
+	'.iptvd .ip-danger .ip-note{font-size:12.5px;color:var(--fg2);margin-bottom:10px}',
+
+	'.iptvd .ip-alert{margin-bottom:10px}',
+	'.iptvd .ip-banner{margin-bottom:14px}',
+	'.iptvd a{color:var(--accent)}'
+].join('\n');
+
+function injectCss() {
+	if (document.getElementById('iptvd-css'))
+		return;
+	var s = document.createElement('style');
+	s.id = 'iptvd-css';
+	s.textContent = CSS;
+	document.head.appendChild(s);
+}
+
+function detectDark(el) {
+	var bg = '';
+	try {
+		var n = document.body;
+		for (var i = 0; i < 5 && n; i++) {
+			var c = getComputedStyle(n).backgroundColor;
+			if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') {
+				bg = c;
+				break;
+			}
+			n = n.parentElement;
+		}
+	} catch (e) {
+		return;
+	}
+	var m = /rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/.exec(bg);
+	if (!m)
+		return;
+	var lum = (0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3]) / 255;
+	if (lum < 0.5)
+		el.classList.add('dark');
+}
+
+/* --------------------------------------------------------------- helpers */
+
 function fmtAge(s) {
 	if (s == null || s < 0)
 		return '-';
@@ -76,14 +206,11 @@ function noteErr(title, err) {
 }
 
 function card(title, rows) {
-	return E('div', {
-		'class': 'iptvd-card',
-		'style': 'background:rgba(127,127,127,.06);border-radius:6px;padding:10px 14px'
-	}, [
-		E('h5', { 'style': 'margin:2px 0 8px' }, title),
-		E('table', { 'class': 'table' }, rows.map(function(r) {
+	return E('div', { 'class': 'ip-card' }, [
+		E('h5', {}, title),
+		E('table', {}, rows.map(function(r) {
 			return E('tr', {}, [
-				E('td', { 'style': 'width:46%;white-space:nowrap;opacity:.75' }, r[0]),
+				E('td', {}, r[0]),
 				E('td', {}, cell(r[1]))
 			]);
 		}))
@@ -93,9 +220,8 @@ function card(title, rows) {
 function inputEl(val, attrs) {
 	var a = {
 		'type': 'text',
-		'class': 'cbi-input-text',
-		'value': (val == null ? '' : String(val)),
-		'style': 'width:100%;max-width:560px;box-sizing:border-box'
+		'class': 'ip-input',
+		'value': (val == null ? '' : String(val))
 	};
 	if (attrs)
 		for (var k in attrs)
@@ -104,24 +230,26 @@ function inputEl(val, attrs) {
 }
 
 function row(label, node, hint) {
-	return E('div', { 'style': 'display:flex;gap:10px;align-items:flex-start;margin-bottom:8px' }, [
-		E('label', { 'style': 'min-width:150px;padding-top:7px;opacity:.8;font-size:13px;flex:none' }, label),
-		E('div', { 'style': 'flex:1;max-width:640px' }, [
-			node,
-			hint ? E('div', { 'style': 'opacity:.6;font-size:12px;margin-top:2px' }, hint) : E('span')
-		])
+	var cellKids = [node];
+	if (hint)
+		cellKids.push(E('div', { 'class': 'ip-hint' }, hint));
+	return E('div', { 'class': 'ip-field' }, [
+		E('label', {}, label),
+		E('div', {}, cellKids)
 	]);
 }
 
-function sectionBox(title, children) {
-	return E('div', {
-		'style': 'background:rgba(127,127,127,.06);border-radius:6px;padding:14px 18px;margin-bottom:14px'
-	}, [E('h4', { 'style': 'margin:0 0 12px' }, title)].concat(children));
+function grp(title) {
+	return E('h5', {}, title);
 }
 
-function btn(text, cls, fn) {
+function sectionBox(title, children) {
+	return E('div', { 'class': 'ip-sec' }, [E('h4', {}, title)].concat(children));
+}
+
+function btn(text, kind, fn) {
 	return E('button', {
-		'class': cls || 'btn cbi-button',
+		'class': 'ip-btn' + (kind ? ' ' + kind : ''),
 		'type': 'button',
 		'click': function(ev) { ev.preventDefault(); fn(ev); }
 	}, text);
@@ -131,6 +259,8 @@ function toInt(v) {
 	var n = parseInt(v, 10);
 	return isNaN(n) ? null : n;
 }
+
+/* ------------------------------------------------------------------ view */
 
 return view.extend({
 	load: function() {
@@ -147,6 +277,8 @@ return view.extend({
 
 	render: function(data) {
 		var self = this;
+
+		injectCss();
 
 		self._st = data.st;
 		self._cfg = data.cfg;
@@ -170,19 +302,20 @@ return view.extend({
 			['adv', '高级']
 		];
 		self._tabBtns = {};
-		var strip = E('div', {
-			'style': 'display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap'
-		}, TABS.map(function(t) {
-			var b = E('button', { 'class': 'btn cbi-button', 'type': 'button' }, t[1]);
+		var strip = E('div', { 'class': 'ip-tabs' }, TABS.map(function(t) {
+			var b = E('button', { 'class': 'ip-tab', 'type': 'button' }, t[1]);
 			b.addEventListener('click', function() { self.showTab(t[0]); });
 			self._tabBtns[t[0]] = b;
 			return b;
 		}));
 
-		var box = E('div', {}, [
-			strip,
-			self._secStatus, self._secAcc, self._secNet, self._secAdv
+		var box = E('div', { 'class': 'iptvd' }, [
+			E('div', { 'class': 'ip-page' }, [
+				strip,
+				self._secStatus, self._secAcc, self._secNet, self._secAdv
+			])
 		]);
+		detectDark(box);
 
 		self.buildStatus();
 		self.buildAccount();
@@ -216,8 +349,7 @@ return view.extend({
 		};
 		for (var k in secs) {
 			secs[k].style.display = (k === name) ? '' : 'none';
-			self._tabBtns[k].className = (k === name)
-				? 'btn cbi-button cbi-button-apply' : 'btn cbi-button';
+			self._tabBtns[k].className = (k === name) ? 'ip-tab on' : 'ip-tab';
 		}
 		if (name === 'net') {
 			Promise.all([
@@ -288,17 +420,16 @@ return view.extend({
 
 		self.alerts().forEach(function(a) {
 			nodes.push(E('div', {
-				'class': 'alert-message ' + (a[0] === 'error' ? 'error' : a[0]),
-				'style': 'margin-bottom:8px'
+				'class': 'alert-message ip-alert ' + (a[0] === 'error' ? 'error' : a[0])
 			}, a[1]));
 		});
 
 		if (!running) {
 			nodes.push(sectionBox('服务', [
-				E('p', {}, st == null
+				E('p', { 'class': 'ip-hint' }, st == null
 					? '状态不可读（iptvd 服务未运行，或 rpcd 插件 iptvd 异常）。'
 					: 'iptvd serve 未运行或不可达。'),
-				btn('启动服务', 'btn cbi-button cbi-button-apply', function() {
+				btn('启动服务', 'primary', function() {
 					self.doService('start');
 				})
 			]));
@@ -313,9 +444,7 @@ return view.extend({
 		var upl = st.uplink || {};
 		var cfg = self._cfg || {};
 
-		nodes.push(E('div', {
-			'style': 'display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px'
-		}, [
+		nodes.push(E('div', { 'class': 'ip-grid' }, [
 			card('服务', [
 				['版本', st.version || '-'],
 				['运行时长', fmtUptime(st.uptime_s)],
@@ -338,16 +467,16 @@ return view.extend({
 				['StbIP', cfg.stbip === 'auto' ? 'auto（自动）' : (cfg.stbip || '-')]
 			]),
 			card('HTTP 端点', [
-				['/full.m3u', E('a', { 'href': base + 'full.m3u', 'target': '_blank' }, '打开')],
-				['/playlist.m3u', E('a', { 'href': base + 'playlist.m3u', 'target': '_blank' }, '打开')],
-				['/epg.xml', E('a', { 'href': base + 'epg.xml', 'target': '_blank' }, '打开')],
-				['/status.json', E('a', { 'href': base + 'status.json', 'target': '_blank' }, '打开')]
+				['/full.m3u', E('a', { 'class': 'ip-chip', 'href': base + 'full.m3u', 'target': '_blank' }, '打开')],
+				['/playlist.m3u', E('a', { 'class': 'ip-chip', 'href': base + 'playlist.m3u', 'target': '_blank' }, '打开')],
+				['/epg.xml', E('a', { 'class': 'ip-chip', 'href': base + 'epg.xml', 'target': '_blank' }, '打开')],
+				['/status.json', E('a', { 'class': 'ip-chip', 'href': base + 'status.json', 'target': '_blank' }, '打开')]
 			])
 		]));
 
-		var actions = E('div', { 'style': 'display:flex;gap:8px;flex-wrap:wrap;margin-top:14px' });
+		var actions = E('div', { 'class': 'ip-actions' });
 		function actBtn(text, name, confirmMsg, handler) {
-			var b = btn(text, 'btn cbi-button', function() {
+			var b = btn(text, '', function() {
 				if (self._busy)
 					return;
 				if (confirmMsg && !confirm(confirmMsg))
@@ -362,21 +491,20 @@ return view.extend({
 		actBtn('刷新频道表', 'refresh', '立即刷新频道表？将重新登录并拉取全部频道。', function(n, b) { self.doAction(n, b); });
 		actBtn('重建XMLTV', 'epg', '立即重建 XMLTV EPG？需拉取节目数据，可能耗时数十秒。', function(n, b) { self.doAction(n, b); });
 		actBtn('重启服务', null, null, function(n, b) { self.doRestart(b); });
-		actions.appendChild(btn('手动刷新', 'btn cbi-button', function() { self.refreshStatus(); }));
+		actions.appendChild(btn('手动刷新', '', function() { self.refreshStatus(); }));
 		nodes.push(actions);
 
-		var logToggle = btn(self._logOpen ? '隐藏日志' : '显示最近日志', 'btn cbi-button', function() {
+		var logToggle = btn(self._logOpen ? '隐藏日志' : '显示最近日志', '', function() {
 			self._logOpen = !self._logOpen;
 			if (self._logOpen && self._logLines == null)
 				self.refreshLog();
 			else
 				self.drawStatus();
 		});
-		var logArea = E('div', { 'style': 'margin-top:12px' }, [logToggle]);
+		var logArea = E('div', { 'style': 'margin-top:14px' }, [logToggle]);
 		if (self._logOpen) {
-			logArea.appendChild(E('pre', {
-				'style': 'margin-top:8px;max-height:300px;overflow:auto;background:rgba(0,0,0,.25);padding:8px 10px;border-radius:4px;font-size:12px;white-space:pre-wrap'
-			}, self._logLines != null ? (self._logLines.join('\n') || '（暂无 iptvd 日志）') : '加载中…'));
+			logArea.appendChild(E('pre', { 'class': 'ip-log' },
+				self._logLines != null ? (self._logLines.join('\n') || '（暂无 iptvd 日志）') : '加载中…'));
 		}
 		nodes.push(logArea);
 
@@ -443,7 +571,6 @@ return view.extend({
 	},
 
 	_poll: function(tries, check, done) {
-		var self = this;
 		var n = 0;
 		var iv = setInterval(function() {
 			n++;
@@ -543,7 +670,7 @@ return view.extend({
 		self._fAcc = f;
 		var kids = [];
 		if (!self._cfg)
-			kids.push(E('div', { 'class': 'alert-message warning', 'style': 'margin-bottom:10px' },
+			kids.push(E('div', { 'class': 'alert-message warning ip-banner' },
 				'无法读取配置（get_config 失败）——表单可能显示为空，请先检查服务与 rpcd 插件。'));
 
 		function fld(label, key, hint, attrs) {
@@ -552,19 +679,24 @@ return view.extend({
 			kids.push(row(label, el, hint));
 		}
 
+		kids.push(grp('平台地址'));
 		fld('EAS 平台地址', 'eas_host', '如 124.132.240.38（IP 或域名）');
 		fld('EPG 平台地址', 'epg_host', '如 60.212.113.86');
+		fld('HTTP 超时(秒)', 'timeout', '1-60 秒', { 'type': 'number', 'min': '1', 'max': '60' });
+
+		kids.push(grp('机顶盒身份'));
 		fld('userid', 'userid');
 		fld('stbid', 'stbid');
 		fld('机顶盒 MAC', 'stbmac', '冒号分隔，如 6C:EF:C6:89:33:7E');
 		fld('auth_key', 'auth_key');
 		fld('机顶盒型号', 'stbtype');
 		fld('软件版本', 'stbversion');
+
+		kids.push(grp('协议标识'));
 		fld('UA', 'ua', '分号分隔串，保持与平台协商一致');
 		fld('XHR 标识', 'xhr');
-		fld('HTTP 超时(秒)', 'timeout', '1-60 秒', { 'type': 'number', 'min': '1', 'max': '60' });
 
-		/* stbip: auto (follow upstream interface) or manual */
+		kids.push(grp('登录 IP（StbIP）'));
 		var isAuto = cfg.stbip === 'auto';
 		var manEl = inputEl(isAuto ? '' : cfg.stbip, { 'placeholder': '如 10.156.22.20' });
 		var rAuto = E('input', {
@@ -579,19 +711,18 @@ return view.extend({
 		f._stbipMan = manEl;
 		function syncMode() {
 			manEl.disabled = rAuto.checked;
-			manEl.style.opacity = rAuto.checked ? '0.5' : '1';
 		}
 		rAuto.addEventListener('change', syncMode);
 		rMan.addEventListener('change', syncMode);
-		kids.push(row('StbIP', E('div', { 'style': 'display:flex;gap:14px;flex-wrap:wrap;align-items:center' }, [
+		kids.push(row('StbIP', E('div', { 'class': 'ip-radio' }, [
 			E('label', {}, [rAuto, ' 自动（跟随上游接口）']),
-			E('label', {}, [rMan, ' 手动指定：']),
+			E('label', {}, [rMan, ' 手动指定']),
 			manEl
 		]), '推荐「自动」：ISP 换段时登录参数自动跟随（需先在「网络与上游」页配置上游接口）。'));
 		syncMode();
 
-		kids.push(E('div', { 'style': 'margin-top:12px;display:flex;gap:8px' }, [
-			btn('保存账号配置', 'btn cbi-button cbi-button-apply', function() {
+		kids.push(E('div', { 'class': 'ip-actions' }, [
+			btn('保存账号配置', 'primary', function() {
 				self.saveAccount();
 			})
 		]));
@@ -653,10 +784,10 @@ return view.extend({
 		self._fNet = f;
 		var kids = [];
 		if (!self._cfg)
-			kids.push(E('div', { 'class': 'alert-message warning', 'style': 'margin-bottom:10px' },
+			kids.push(E('div', { 'class': 'alert-message warning ip-banner' },
 				'无法读取配置（get_config 失败）——表单可能显示为空。'));
 
-		/* upstream device selector (fallback: free text when ubus denied) */
+		kids.push(grp('出口接口'));
 		var ifaceEl;
 		var devs = self._devs;
 		if (devs && typeof devs === 'object') {
@@ -665,10 +796,8 @@ return view.extend({
 				if (devs[n] && devs[n].present !== false)
 					names.push(n);
 			names.sort();
-			ifaceEl = E('select', {
-				'class': 'cbi-input-select',
-				'style': 'max-width:360px'
-			}, [E('option', { 'value': '' }, '（空 = 按系统路由表）')]);
+			ifaceEl = E('select', { 'class': 'ip-input' },
+				[E('option', { 'value': '' }, '（空 = 按系统路由表）')]);
 			names.forEach(function(nm) {
 				var d = devs[nm] || {};
 				var label = nm + (d.type ? ' (' + d.type + ')' : '') +
@@ -685,10 +814,10 @@ return view.extend({
 		kids.push(row('上游（IPTV 出口）接口', ifaceEl,
 			'绑定平台流量的物理出口：请求绑源地址 + 下发 pref1000 规则（源地址全从该口出），ISP 换段自动跟随。IPTV 线通常插在 lan4。'));
 
-		kids.push(E('div', { 'style': 'margin-top:6px' }, [self.uplinkBox()]));
+		kids.push(E('div', { 'style': 'margin-top:4px' }, [self.uplinkBox()]));
 		self._netUplinkBox = kids[kids.length - 1];
 
-		/* local endpoints */
+		kids.push(grp('本地端点'));
 		function fld(label, key, hint, attrs) {
 			var el = inputEl(cfg[key], attrs);
 			f[key] = el;
@@ -700,8 +829,8 @@ return view.extend({
 		fld('回看模板 (bridge_tpl)', 'bridge_tpl', '含 {uid} 与签名占位的回看链接模板');
 		fld('generator-info-url', 'gen_url', 'XMLTV 生成器地址');
 
-		kids.push(E('div', { 'style': 'margin-top:12px;display:flex;gap:8px;flex-wrap:wrap' }, [
-			btn('按当前主机自动填', 'btn cbi-button', function() {
+		kids.push(E('div', { 'class': 'ip-actions' }, [
+			btn('按当前主机自动填', '', function() {
 				var h = window.location.hostname;
 				var p = toInt(f.port.value) || 5150;
 				f.r2h.value = 'http://' + h + ':5141';
@@ -711,7 +840,7 @@ return view.extend({
 					'/c?ch={uid}&s=${(b)yyyyMMddHHmmss}&u=${timestamp}';
 				note('已按 ' + h + ' 填充，确认后点保存。');
 			}),
-			btn('保存网络配置', 'btn cbi-button cbi-button-apply', function() {
+			btn('保存网络配置', 'primary', function() {
 				self.saveNet();
 			})
 		]));
@@ -720,19 +849,14 @@ return view.extend({
 	},
 
 	uplinkBox: function() {
-		var self = this;
-		var st = self._st || {};
+		var st = this._st || {};
 		var upl = st.uplink || {};
-		var snap = self._up || {};
+		var snap = this._up || {};
 		return card('上游实况', [
 			['接口', upl.interface || '（未配置）'],
 			['当前地址', upl.ip || '-'],
-			['ip rule', E('pre', {
-				'style': 'margin:0;font-size:12px;white-space:pre-wrap'
-			}, snap.rule || '（无 pref1000 规则）')],
-			['table 1001', E('pre', {
-				'style': 'margin:0;font-size:12px;white-space:pre-wrap'
-			}, snap.table || '（空）')]
+			['ip rule', E('pre', { 'class': 'ip-pre' }, snap.rule || '（无 pref1000 规则）')],
+			['table 1001', E('pre', { 'class': 'ip-pre' }, snap.table || '（空）')]
 		]);
 	},
 
@@ -784,9 +908,10 @@ return view.extend({
 		self._fAdv = f;
 		var kids = [];
 		if (!self._cfg)
-			kids.push(E('div', { 'class': 'alert-message warning', 'style': 'margin-bottom:10px' },
+			kids.push(E('div', { 'class': 'alert-message warning ip-banner' },
 				'无法读取配置（get_config 失败）——表单可能显示为空。'));
 
+		kids.push(grp('缓存与窗口'));
 		var NUMS = [
 			['ttl_progs', '节目缓存 TTL(秒)', '60-86400'],
 			['ttl_tvod', 'TVOD 缓存 TTL(秒)', '60-86400'],
@@ -806,59 +931,50 @@ return view.extend({
 			f[n[0]] = el;
 			kids.push(row(n[1], el, n[2] + '，当前值 ' + cfg[n[0]]));
 		});
-
-		/* readonly paths */
-		['data_dir', 'cache_dir', 'session', 'channels', 'epg_file'].forEach(function(k) {
-			kids.push(row(k + '（只读）', inputEl(cfg[k], { 'readonly': true }),
-				'改路径请用下方原文编辑器'));
-		});
-
-		kids.push(E('div', { 'style': 'margin-top:12px' }, [
-			btn('保存窗口设置', 'btn cbi-button cbi-button-apply', function() {
+		kids.push(E('div', { 'class': 'ip-actions' }, [
+			btn('保存窗口设置', 'primary', function() {
 				self.saveNums();
 			})
 		]));
 
-		/* raw config editor */
+		kids.push(grp('路径（只读）'));
+		['data_dir', 'cache_dir', 'session', 'channels', 'epg_file'].forEach(function(k) {
+			kids.push(row(k, inputEl(cfg[k], { 'readonly': true }),
+				'改路径请用下方原文编辑器'));
+		});
+
 		var ta = E('textarea', {
-			'class': 'cbi-input-textarea',
-			'style': 'width:100%;min-height:260px;box-sizing:border-box;font-family:monospace;font-size:12px',
+			'class': 'ip-input ip-ta',
 			'spellcheck': 'false'
 		});
 		f._raw = ta;
-		kids.push(E('div', { 'style': 'margin-top:18px' }, [
-			E('h5', { 'style': 'margin:0 0 6px' }, '原文编辑器（/etc/iptvd.conf 全文）'),
-			E('div', { 'style': 'opacity:.6;font-size:12px;margin-bottom:6px' },
-				'保存前会做语法/整数校验，校验不过不会写入。适合修改没做界面的键。'),
-			ta,
-			E('div', { 'style': 'margin-top:8px;display:flex;gap:8px;flex-wrap:wrap' }, [
-				btn('重新载入原文', 'btn cbi-button', function() { self.loadRaw(ta); }),
-				btn('保存原文', 'btn cbi-button cbi-button-apply', function() {
-					self.saveRaw(ta);
-				})
-			])
+		kids.push(grp('原文编辑器（/etc/iptvd.conf 全文）'));
+		kids.push(E('div', { 'class': 'ip-hint', 'style': 'margin:-4px 0 8px' },
+			'保存前会做语法/整数校验，校验不过不会写入。适合修改没做界面的键。'));
+		kids.push(ta);
+		kids.push(E('div', { 'class': 'ip-actions' }, [
+			btn('重新载入原文', '', function() { self.loadRaw(ta); }),
+			btn('保存原文', 'primary', function() { self.saveRaw(ta); })
 		]));
 		self.loadRaw(ta);
 
-		/* danger zone */
 		var svc = self._svc || {};
-		kids.push(E('div', { 'style': 'margin-top:18px' }, [
-			E('h5', { 'style': 'margin:0 0 6px' }, '服务管理'),
-			E('div', { 'style': 'font-size:13px;opacity:.85;margin-bottom:8px' }, [
+		kids.push(E('div', { 'class': 'ip-danger' }, [
+			E('h5', {}, '服务管理'),
+			E('div', { 'class': 'ip-note' },
 				'当前：' + (svc.running ? '运行中' : '已停止') +
-				'，开机自启 ' + (svc.enabled ? '开' : '关')
-			]),
-			E('div', { 'style': 'display:flex;gap:8px;flex-wrap:wrap' }, [
-				btn('启动', 'btn cbi-button cbi-button-apply', function() {
+				'，开机自启 ' + (svc.enabled ? '开' : '关')),
+			E('div', { 'class': 'ip-actions', 'style': 'margin-top:6px' }, [
+				btn('启动', 'primary', function() {
 					self.doService('start');
 				}),
-				btn('停止', 'btn cbi-button cbi-button-remove', function() {
+				btn('停止', 'danger', function() {
 					self.doService('stop', '停止 iptvd 服务？所有播放列表/EPG 端点将不可用。');
 				}),
-				btn('重启', 'btn cbi-button', function() {
+				btn('重启', '', function() {
 					self.doRestart(null);
 				}),
-				btn(svc.enabled ? '关闭开机自启' : '开启开机自启', 'btn cbi-button', function() {
+				btn(svc.enabled ? '关闭开机自启' : '开启开机自启', '', function() {
 					self.doService(svc.enabled ? 'disable' : 'enable');
 				})
 			])
