@@ -131,7 +131,24 @@ var CSS = [
 
 	'.iptvd .ip-alert{margin-bottom:10px}',
 	'.iptvd .ip-banner{margin-bottom:14px}',
-	'.iptvd a{color:var(--accent)}'
+	'.iptvd a{color:var(--accent)}',
+
+	'#iptvd-toast{position:fixed;top:72px;left:50%;transform:translateX(-50%);',
+	'z-index:1100;display:none;align-items:flex-start;gap:16px;',
+	'max-width:min(720px,92vw);padding:12px 14px;border-radius:10px;',
+	'border:1px solid var(--line,#e7e8f0);background:var(--card,#fff);',
+	'color:var(--fg,#1b1d26);box-shadow:0 8px 28px rgba(10,12,50,.22);',
+	'font-size:13.5px;font-weight:550}',
+	'#iptvd-toast .iptvd-toast-msg{flex:1 1 auto;white-space:pre-wrap;word-break:break-word}',
+	'#iptvd-toast .iptvd-toast-x{flex:0 0 auto;border:1px solid var(--line,#e7e8f0);',
+	'background:transparent;color:var(--fg2,#5c6070);border-radius:7px;padding:4px 12px;',
+	'cursor:pointer;font-size:12.5px;font-weight:550;transition:.15s}',
+	'#iptvd-toast .iptvd-toast-x:hover{border-color:var(--accent,#5a67f8);color:var(--accent,#5a67f8)}',
+	'#iptvd-toast.info{border-color:rgba(90,103,248,.55)}',
+	'#iptvd-toast.success{border-color:rgba(29,180,111,.6)}',
+	'#iptvd-toast.warning{border-color:rgba(219,146,19,.75)}',
+	'#iptvd-toast.error{border-color:rgba(229,72,77,.75)}',
+	'#iptvd-toast.error .iptvd-toast-msg{color:#e5484d;filter:saturate(1.1)}'
 ].join('\n');
 
 function injectCss() {
@@ -197,14 +214,42 @@ function cell(v) {
 	return String(v);
 }
 
+/* Single-slot toast. argon pins every .alert-message dead-center (so newer
+   notifications stack invisibly behind older ones) and LuCI's Dismiss relies
+   on a transitionend that argon's CSS never triggers. Own toast: newest
+   always replaces content, close hides synchronously, non-errors auto-hide. */
+var TOAST_AUTO_MS = { 'success': 6000, 'info': 8000, 'warning': 10000 };
+
 function note(msg, cls) {
-	ui.addNotification(null, (typeof msg === 'string') ? E('p', {}, msg) : msg, cls || 'info');
+	showToast(cls || 'info', (typeof msg === 'string') ? msg : String(msg));
 }
 
 function noteErr(title, err) {
-	ui.addNotification(null,
-		E('pre', { 'style': 'white-space:pre-wrap;max-width:760px;margin:0' },
-			title + (err || '未知错误')), 'error');
+	showToast('error', title + (err || '未知错误'));
+}
+
+function showToast(cls, text) {
+	var host = document.getElementById('iptvd-toast');
+	if (!host || !host.isConnected) {
+		host = E('div', { 'id': 'iptvd-toast' });
+		var root = document.querySelector('.iptvd') ||
+			document.getElementById('maincontent') || document.body;
+		root.appendChild(host);
+	}
+	host.className = 'iptvd-toast ' + cls;
+	host.replaceChildren(
+		E('div', { 'class': 'iptvd-toast-msg' }, text),
+		E('button', {
+			'class': 'iptvd-toast-x', 'type': 'button',
+			'click': function() { host.style.display = 'none'; }
+		}, '关闭')
+	);
+	host.style.display = 'flex';
+	if (host._timer)
+		clearTimeout(host._timer);
+	var ms = TOAST_AUTO_MS[cls] || 0;
+	if (ms > 0)
+		host._timer = setTimeout(function() { host.style.display = 'none'; }, ms);
 }
 
 function card(title, rows) {
@@ -574,8 +619,12 @@ return view.extend({
 					return rpcStatus().then(function(st) {
 						self._st = st;
 						var b = st && st.epg && st.epg.built_s;
-						return (b != null && b !== prevBuilt) ||
-							(prevBuilt == null && st && st.epg_ready);
+						if (b == null)
+							return false;
+						if (prevBuilt == null)
+							return true;
+						/* built_s 是"距上次构建的秒数"：数值变小 = 刚重建 */
+						return b < prevBuilt;
 					});
 				}, function(done) {
 					self._busy = false;
@@ -598,24 +647,44 @@ return view.extend({
 	},
 
 	_poll: function(tries, check, done) {
-		var n = 0;
-		var iv = setInterval(function() {
-			n++;
-			Promise.resolve().then(check).then(function(yes) {
+		var deadline = Date.now() + tries * 3000;
+		var finished = false;
+		function finish(ok) {
+			if (finished)
+				return;
+			finished = true;
+			done(ok);
+		}
+		function tick() {
+			var settled = false;
+			function step(yes) {
 				if (yes) {
-					clearInterval(iv);
-					done(true);
-				} else if (n >= tries) {
-					clearInterval(iv);
-					done(false);
+					finish(true);
+				} else if (Date.now() >= deadline) {
+					finish(false);
+				} else {
+					setTimeout(tick, 3000);
 				}
+			}
+			var guard = setTimeout(function() {
+				settled = true;
+				step(false);
+			}, 10000);
+			Promise.resolve().then(check).then(function(yes) {
+				if (settled)
+					return;
+				settled = true;
+				clearTimeout(guard);
+				step(yes);
 			}, function() {
-				if (n >= tries) {
-					clearInterval(iv);
-					done(false);
-				}
+				if (settled)
+					return;
+				settled = true;
+				clearTimeout(guard);
+				step(false);
 			});
-		}, 3000);
+		}
+		setTimeout(tick, 3000);
 	},
 
 	doRestart: function(button, skipConfirm) {
