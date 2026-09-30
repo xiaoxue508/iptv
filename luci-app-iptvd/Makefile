@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-iptvd
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -43,6 +43,16 @@ define Package/luci-app-iptvd/install
 	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/iptvd
 	$(INSTALL_DATA) $(CURDIR)/files/view/iptvd/status.js \
 		$(1)/www/luci-static/resources/view/iptvd/
+endef
+
+# SDK clamps packaged file mtimes to a fixed epoch; uhttpd then serves an
+# ancient Last-Modified and browsers heuristically cache the view JS for
+# weeks. Refresh the mtime at install time so updates go stale in minutes.
+define Package/luci-app-iptvd/postinst
+#!/bin/sh
+[ -n "$${IPKG_INSTROOT}" ] || \
+	touch /www/luci-static/resources/view/iptvd/status.js 2>/dev/null
+exit 0
 endef
 
 $(eval $(call BuildPackage,luci-app-iptvd))
