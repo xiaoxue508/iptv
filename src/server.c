@@ -45,6 +45,7 @@ static const char *reason(int code)
     case 404: return "Not Found";
     case 500: return "Internal Server Error";
     case 501: return "Unsupported method";
+    case 502: return "Bad Gateway";
     case 503: return "Service Unavailable";
     default:  return "Error";
     }
@@ -115,8 +116,8 @@ static void route(int fd, int head, const char *path, const char *query)
     dbuf_init(&body);
     int code = 200;
     const char *ctype = "text/plain; charset=utf-8";
-    char extra[600];
-    extra[0] = 0;
+    dbuf extra;
+    dbuf_init(&extra);
 
     if (!strcmp(path, "/") || !strcmp(path, "/status")) {
         status_page(&body);
@@ -152,14 +153,14 @@ static void route(int fd, int head, const char *path, const char *query)
         char *u = qget(query, "u");
         dbuf redir;
         dbuf_init(&redir);
-        char err[512];
+        char err[2048];
         err[0] = 0;
         code = catchup_handle(ch, s, u, &redir, err, sizeof err);
         if (code == 200) {
+            code = 302;
             dbuf_add(&body, "redirect");
-            snprintf(extra, sizeof extra,
-                     "Location: %s\r\nCache-Control: no-store\r\n",
-                     redir.p ? redir.p : "");
+            dbuf_addf(&extra, "Location: %s\r\nCache-Control: no-store\r\n",
+                      redir.p ? redir.p : "");
         } else {
             dbuf_add(&body, err);
         }
@@ -172,8 +173,9 @@ static void route(int fd, int head, const char *path, const char *query)
         dbuf_add(&body, "not found");
     }
 
-    send_resp(fd, code, ctype, &body, head, extra[0] ? extra : NULL);
+    send_resp(fd, code, ctype, &body, head, extra.len ? extra.p : NULL);
     dbuf_free(&body);
+    dbuf_free(&extra);
 }
 
 /* ---------------- connection handling ---------------- */
