@@ -697,6 +697,13 @@ int plat_tvod(const char *prevuecode, const char *channel_code,
     p += strlen("top.jsPlayTVOD(\"");
     const char *e = strchr(p, '"');
     if (!e) { dbuf_free(&text); return -1; }
+    /* python: re.search(r'top\.jsPlayTVOD\("([^"]+)"\)') — empty capture
+       ("") does not match and raises; whitespace-only still matches */
+    if (e == p) {
+        fprintf(stderr, "no jsPlayTVOD in tvodplay.jsp:\n%.800s\n", s);
+        dbuf_free(&text);
+        return -1;
+    }
     /* re.sub(r"\s+", "", captured) */
     for (const char *k = p; k < e; k++)
         if (!(*k == ' ' || *k == '\t' || *k == '\n' || *k == '\r' || *k == '\f' || *k == '\v'))
