@@ -103,6 +103,14 @@ void logmsg(const char *fmt, ...)
 /* ---------------- time (fixed +8, port-spec R16) ---------------- */
 time_t now_sec(void) { return time(NULL); }
 
+time_t mono_sec(void)
+{
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return (time_t)ts.tv_sec;
+    return time(NULL);
+}
+
 void gm8(time_t t, struct tm *out)
 {
     time_t x = t + 8 * 3600;

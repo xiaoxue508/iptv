@@ -49,12 +49,14 @@ static time_t g_start;
 
 void status_init(void)
 {
-    g_start = now_sec();
+    /* monotonic: wall clock jumps (NTP initial sync right after boot)
+       must not inflate the reported service uptime */
+    g_start = mono_sec();
 }
 
 void status_json(dbuf *out)
 {
-    if (!g_start) g_start = now_sec();
+    if (!g_start) g_start = mono_sec();
 
     jv *o = jobj();
     char num[32];
@@ -65,7 +67,7 @@ void status_json(dbuf *out)
     } while (0)
 
     jobj_set(o, "version", jstr(IPTVD_VERSION));
-    NUM(o, "uptime_s", now_sec() - g_start);
+    NUM(o, "uptime_s", mono_sec() - g_start);
     NUM(o, "port", g.port);
 
     jv *ch = jobj();

@@ -26,6 +26,7 @@ void logmsg(const char *fmt, ...);
 void gm8(time_t t, struct tm *out);
 time_t mk8(const struct tm *in);
 time_t now_sec(void);
+time_t mono_sec(void); /* CLOCK_MONOTONIC seconds; immune to NTP clock jumps */
 void strftime8(char *out, size_t n, const char *fmt, time_t t);
 
 int utf8_valid(const void *d, size_t n);
