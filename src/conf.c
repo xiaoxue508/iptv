@@ -35,6 +35,7 @@ void conf_defaults(void)
     g.worker_s = 120;
     g.port = 5150;
     g.xmltv_wait_s = 180;
+    strcpy(g.bounce_iface, "iptv");
     strcpy(g.data_dir, "/etc/iptvd");
     strcpy(g.cache_dir, "/tmp/iptvd");
 }
@@ -87,6 +88,7 @@ static void set_kv(const char *key, const char *val)
     else if (!strcmp(key, "port")) g.port = atoi(val);
     else if (!strcmp(key, "xmltv_wait_s")) g.xmltv_wait_s = atoi(val);
     else if (!strcmp(key, "upstream_interface")) SETSTR(upstream_interface, val);
+    else if (!strcmp(key, "bounce_iface")) SETSTR(bounce_iface, val);
     else if (!strcmp(key, "data_dir")) SETSTR(data_dir, val);
     else if (!strcmp(key, "cache_dir")) SETSTR(cache_dir, val);
     else if (!strcmp(key, "session")) SETSTR(session, val);
@@ -124,8 +126,8 @@ static const char *const conf_keys[] = {
     "stbtype", "stbversion", "ua", "xhr", "timeout", "r2h", "m3u_epg_url",
     "bridge_tpl", "gen_url", "ttl_progs", "ttl_tvod", "ttl_epg",
     "ttl_channels", "min_channels", "epg_past", "epg_future", "worker_s",
-    "port", "xmltv_wait_s", "upstream_interface", "data_dir", "cache_dir",
-    "session", "channels", "epg_file", NULL
+    "port", "xmltv_wait_s", "upstream_interface", "bounce_iface", "data_dir",
+    "cache_dir", "session", "channels", "epg_file", NULL
 };
 
 int conf_valid_key(const char *key)

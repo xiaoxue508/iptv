@@ -58,6 +58,7 @@ typedef struct {
     int ttl_progs, ttl_tvod, ttl_epg, ttl_channels, min_channels;
     int epg_past, epg_future, worker_s, port, xmltv_wait_s;
     char upstream_interface[32];    /* bind+route platform traffic ("" = off) */
+    char bounce_iface[32];          /* keepalive bounce target (UCI logical name) */
     int stbip_auto;                 /* conf stbip=auto -> take interface addr */
     char data_dir[96], cache_dir[96];
     char session[160], channels[160], epg_file[160];

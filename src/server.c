@@ -301,6 +301,84 @@ static void *uplink_thread(void *arg)
     return NULL;
 }
 
+/* keepalive (was /root/iptv_ka.sh on a 1-min cron): ping the uplink gateway
+   from the bound source.  ping -c3 all-lost = 1 failure, KA_THRESHOLD
+   consecutive failures (~3 min) -> bounce the logical interface once.
+   Success resets; an address/gateway change (DHCP) invalidates the counter.
+   No evidence snapshot: logmsg only (syslog/logread is the fallback). */
+#define KA_THRESHOLD 3
+
+static int ka_ping(const char *src, const char *dst, int count)
+{
+    char cmd[160];
+    snprintf(cmd, sizeof cmd, "ping -c%d -W1 -I %s %s >/dev/null 2>&1",
+             count, src, dst);
+    return system(cmd) == 0;
+}
+
+static void *ka_thread(void *arg)
+{
+    (void)arg;
+    int fails = 0, idle_logged = 0;
+    char last_src[32] = "", last_gw[32] = "";
+    for (;;) {
+        sleep(60);
+        const char *src = uplink_ip();
+        char gw[32];
+        if (!src[0] || uplink_gw(gw, sizeof gw) != 0) {
+            if (!idle_logged) {
+                idle_logged = 1;
+                logmsg("ka: no uplink addr/gw, keepalive idle");
+            }
+            fails = 0;
+            last_src[0] = last_gw[0] = 0;
+            continue;
+        }
+        idle_logged = 0;
+        if (strcmp(last_src, src) || strcmp(last_gw, gw)) {
+            snprintf(last_src, sizeof last_src, "%s", src);
+            snprintf(last_gw, sizeof last_gw, "%s", gw);
+            fails = 0;
+        }
+        if (ka_ping(src, gw, 3)) {
+            fails = 0;
+            continue;
+        }
+        if (++fails < KA_THRESHOLD) {
+            logmsg("ka: gw ping lost %d/%d, no bounce yet", fails, KA_THRESHOLD);
+            continue;
+        }
+        fails = 0;
+        if (!g.bounce_iface[0] || !uplink_dev_ok(g.bounce_iface)) {
+            logmsg("ka: gw ping lost %d consecutive times, bounce_iface '%s' "
+                   "invalid, not bouncing", KA_THRESHOLD, g.bounce_iface);
+            continue;
+        }
+        logmsg("ka: gw ping lost %d consecutive times, bouncing %s",
+               KA_THRESHOLD, g.bounce_iface);
+        char cmd[80];
+        snprintf(cmd, sizeof cmd, "ifdown %s", g.bounce_iface);
+        system(cmd);
+        sleep(1);
+        snprintf(cmd, sizeof cmd, "ifup %s", g.bounce_iface);
+        system(cmd);
+        sleep(7);
+        uplink_ensure(1);
+        src = uplink_ip();
+        if (!src[0] || uplink_gw(gw, sizeof gw) != 0) {
+            logmsg("ka: bounce done, uplink addr/gw not back yet (dhcp pending)");
+            continue;
+        }
+        snprintf(last_src, sizeof last_src, "%s", src);
+        snprintf(last_gw, sizeof last_gw, "%s", gw);
+        if (ka_ping(src, gw, 2))
+            logmsg("ka: bounce ok, gw %s reachable from %s", gw, src);
+        else
+            logmsg("ka: bounce failed, gw %s still unreachable", gw);
+    }
+    return NULL;
+}
+
 /* ---------------- main loop ---------------- */
 
 int server_run(void)
@@ -322,6 +400,10 @@ int server_run(void)
     {
         pthread_t t3;
         if (pthread_create(&t3, NULL, uplink_thread, NULL) == 0) pthread_detach(t3);
+    }
+    {
+        pthread_t t4;
+        if (pthread_create(&t4, NULL, ka_thread, NULL) == 0) pthread_detach(t4);
     }
 
     logmsg("srcbox_bridge on :%d (epg=%s, channels ttl=%ds)",

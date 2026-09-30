@@ -10,5 +10,7 @@
    the destination. No per-subnet route lists, no external scripts. */
 void uplink_ensure(int log_changes);   /* idempotent; start + every ~60s */
 const char *uplink_ip(void);           /* current source IP or "" */
+int uplink_gw(char *out, size_t n);    /* current gateway; 0=ok, -1=none */
+int uplink_dev_ok(const char *s);      /* name safe to embed in shell */
 
 #endif

@@ -20,7 +20,7 @@ const char *uplink_ip(void)
 }
 
 /* device names end up in shell commands: allow only safe chars, < IFNAMSIZ */
-static int dev_ok(const char *s)
+int uplink_dev_ok(const char *s)
 {
     size_t n = strlen(s);
     if (!n || n >= IFNAMSIZ) return 0;
@@ -105,7 +105,7 @@ void uplink_ensure(int log_changes)
         }
         return;
     }
-    if (!dev_ok(g.upstream_interface)) {
+    if (!uplink_dev_ok(g.upstream_interface)) {
         if (log_changes) logmsg("uplink: bad interface name '%s'",
                                 g.upstream_interface);
         return;
@@ -139,6 +139,21 @@ void uplink_ensure(int log_changes)
                      UPLINK_PREF, ip, UPLINK_TABLE);
             system(cmd);
         }
+        /* platform /24s in the main table (was /etc/udhcpc.user.d/99-iptv-routes):
+           LAN-origin traffic (epg.py, manual tools) has no source binding, so it
+           needs destination routes or the pppoe default (metric 1) wins and the
+           STB source IP is lost.  Refreshed every cycle: network reload / gateway
+           change self-heals in <=60s instead of waiting for the DHCP lease. */
+        static const char *const plat[] = {
+            "60.212.113.0/24", "60.212.114.0/24", "60.212.115.0/24",
+            "124.132.240.0/24", "119.180.21.0/24"
+        };
+        for (size_t i = 0; i < sizeof plat / sizeof *plat; i++) {
+            snprintf(cmd, sizeof cmd,
+                     "ip route replace %s via %s dev %s metric 10 2>/dev/null",
+                     plat[i], gw, g.upstream_interface);
+            system(cmd);
+        }
     }
 
     int changed = strcmp(cur_ip, ip) != 0;
@@ -150,4 +165,11 @@ void uplink_ensure(int log_changes)
 
     if (g.stbip_auto && strcmp(g.stbip, ip))
         snprintf(g.stbip, sizeof g.stbip, "%s", ip);
+}
+
+int uplink_gw(char *out, size_t n)
+{
+    if (!g.upstream_interface[0] || !uplink_dev_ok(g.upstream_interface))
+        return -1;
+    return iface_gw(g.upstream_interface, out, n);
 }
