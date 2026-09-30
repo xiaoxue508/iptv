@@ -50,20 +50,22 @@ jobs:
           # base feed provides zlib/libopenssl/ca-bundle (libcurl deps)
           ./scripts/feeds update base packages
           ./scripts/feeds install libcurl
-          mkdir -p package/iptvd
-          rsync -a --exclude .git "$GITHUB_WORKSPACE/" package/iptvd/
+          mkdir -p package/iptvd package/luci-app-iptvd
+          rsync -a --exclude .git --exclude luci-app-iptvd "$GITHUB_WORKSPACE/" package/iptvd/
+          rsync -a "$GITHUB_WORKSPACE/luci-app-iptvd/" package/luci-app-iptvd/
           echo "CONFIG_PACKAGE_iptvd=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-iptvd=y" >> .config
           make defconfig
-          if ! make package/iptvd/compile -j"$(nproc)"; then
+          if ! make package/iptvd/compile package/luci-app-iptvd/compile -j"$(nproc)"; then
             echo "== retry verbose =="
-            make package/iptvd/compile -j1 V=s 2>&1 | tail -n 150
+            make package/iptvd/compile package/luci-app-iptvd/compile -j1 V=s 2>&1 | tail -n 150
             exit 1
           fi
 
       - name: Collect IPK
         run: |
           mkdir -p out
-          find "$RUNNER_TEMP/sdk/bin" -name 'iptvd_*.ipk' -print -exec cp {} out/ \;
+          find "$RUNNER_TEMP/sdk/bin" -name '*.ipk' \( -name 'iptvd_*.ipk' -o -name 'luci-app-iptvd_*.ipk' \) -print -exec cp {} out/ \;
           ls -la out
 
       - name: Upload artifact

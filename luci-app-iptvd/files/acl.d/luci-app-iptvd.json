@@ -1,0 +1,10 @@
+{
+	"luci-app-iptvd": {
+		"description": "Allow reading iptvd service status",
+		"read": {
+			"ubus": {
+				"iptvd": [ "status" ]
+			}
+		}
+	}
+}

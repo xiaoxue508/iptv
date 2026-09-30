@@ -1,0 +1,16 @@
+#!/bin/sh
+# rpcd exec plugin: ubus object "iptvd", method "status"
+# (stdout must be exactly one JSON value)
+
+case "$1" in
+list)
+	echo '{"status": {}}'
+	;;
+call)
+	case "$2" in
+	status)
+		/usr/sbin/iptvd status --json 2>/dev/null || echo '{}'
+		;;
+	esac
+	;;
+esac

@@ -1,0 +1,13 @@
+{
+	"admin/status/iptvd": {
+		"title": "IPTV 控制面",
+		"order": 60,
+		"action": {
+			"type": "view",
+			"path": "iptvd/status"
+		},
+		"depends": {
+			"acl": [ "luci-app-iptvd" ]
+		}
+	}
+}
