@@ -129,8 +129,13 @@ var CSS = [
 	'.iptvd .ip-danger h5{margin:0 0 4px;color:#e5484d;font-size:13px;letter-spacing:0}',
 	'.iptvd .ip-danger .ip-note{font-size:12.5px;color:var(--fg2);margin-bottom:10px}',
 
-	'.iptvd .ip-alert{margin-bottom:10px}',
+	'.iptvd .ip-alert{margin-bottom:10px;padding:9px 13px;border-radius:9px;',
+	'border:1px solid var(--line);font-size:13.5px;line-height:1.55}',
 	'.iptvd .ip-banner{margin-bottom:14px}',
+	'.iptvd .ip-alert.ip-error{border-color:rgba(229,72,77,.5);background:rgba(229,72,77,.08);',
+	'color:#e5484d}',
+	'.iptvd .ip-alert.ip-warning{border-color:rgba(219,146,19,.55);background:rgba(219,146,19,.1)}',
+	'.iptvd .ip-alert.ip-info{border-color:rgba(90,103,248,.45);background:rgba(90,103,248,.08)}',
 	'.iptvd a{color:var(--accent)}',
 
 	'#iptvd-toast{position:fixed;top:72px;left:50%;transform:translateX(-50%);',
@@ -494,7 +499,7 @@ return view.extend({
 
 		self.alerts().forEach(function(a) {
 			nodes.push(E('div', {
-				'class': 'alert-message ip-alert ' + (a[0] === 'error' ? 'error' : a[0])
+				'class': 'ip-alert ip-' + a[0]
 			}, a[1]));
 		});
 
@@ -646,8 +651,9 @@ return view.extend({
 		});
 	},
 
-	_poll: function(tries, check, done) {
-		var deadline = Date.now() + tries * 3000;
+	_poll: function(tries, check, done, interval) {
+		interval = interval || 3000;
+		var deadline = Date.now() + tries * interval;
 		var finished = false;
 		function finish(ok) {
 			if (finished)
@@ -663,7 +669,7 @@ return view.extend({
 				} else if (Date.now() >= deadline) {
 					finish(false);
 				} else {
-					setTimeout(tick, 3000);
+					setTimeout(tick, interval);
 				}
 			}
 			var guard = setTimeout(function() {
@@ -684,7 +690,7 @@ return view.extend({
 				step(false);
 			});
 		}
-		setTimeout(tick, 3000);
+		setTimeout(tick, interval);
 	},
 
 	doRestart: function(button, skipConfirm) {
@@ -706,31 +712,19 @@ return view.extend({
 				return;
 			}
 			note('正在重启服务，等待重新上线…');
-			var n = 0;
-			var iv = setInterval(function() {
-				n++;
-				rpcStatus().then(function(st) {
+			self._poll(35, function() {
+				return rpcStatus().then(function(st) {
 					var up = st && st.uptime_s;
-					var ok = st && st.version &&
-						(prev === 0 || (up != null && up < prev));
-					if (ok) {
-						clearInterval(iv);
-						self._busy = false;
-						note('服务已重启完成。', 'success');
-						self.reload();
-					} else if (n >= 35) {
-						clearInterval(iv);
-						self._busy = false;
-						note('30 秒内未观察到重启完成，可能仍在启动，稍后手动刷新。', 'warning');
-						self.reload();
-					}
-				}, function() {
-					if (n >= 35) {
-						clearInterval(iv);
-						self._busy = false;
-						self.reload();
-					}
+					return !!(st && st.version &&
+						(prev === 0 || (up != null && up < prev)));
 				});
+			}, function(done) {
+				self._busy = false;
+				if (done)
+					note('服务已重启完成。', 'success');
+				else
+					note('30 秒内未观察到重启完成，可能仍在启动，稍后手动刷新。', 'warning');
+				self.reload();
 			}, 1000);
 		}, function(err) {
 			self._busy = false;
@@ -766,7 +760,7 @@ return view.extend({
 		self._fAcc = f;
 		var kids = [];
 		if (!self._cfg)
-			kids.push(E('div', { 'class': 'alert-message warning ip-banner' },
+			kids.push(E('div', { 'class': 'ip-alert ip-warning ip-banner' },
 				'无法读取配置（get_config 失败）——表单可能显示为空，请先检查服务与 rpcd 插件。'));
 
 		function fld(label, key, hint, attrs) {
@@ -880,7 +874,7 @@ return view.extend({
 		self._fNet = f;
 		var kids = [];
 		if (!self._cfg)
-			kids.push(E('div', { 'class': 'alert-message warning ip-banner' },
+			kids.push(E('div', { 'class': 'ip-alert ip-warning ip-banner' },
 				'无法读取配置（get_config 失败）——表单可能显示为空。'));
 
 		kids.push(grp('出口接口'));
@@ -1004,7 +998,7 @@ return view.extend({
 		self._fAdv = f;
 		var kids = [];
 		if (!self._cfg)
-			kids.push(E('div', { 'class': 'alert-message warning ip-banner' },
+			kids.push(E('div', { 'class': 'ip-alert ip-warning ip-banner' },
 				'无法读取配置（get_config 失败）——表单可能显示为空。'));
 
 		kids.push(grp('缓存与窗口'));

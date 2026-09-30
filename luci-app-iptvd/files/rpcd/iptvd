@@ -102,7 +102,10 @@ call)
 		relogin | refresh | epg) ;;
 		*) fail_json "unknown action"; exit 0 ;;
 		esac
-		wget -q -T 15 -O - "http://127.0.0.1:$(port)/api?action=${name}" 2>/dev/null ||
+		# refresh runs synchronously in iptvd (relogin + full channel
+		# fetch, tens of seconds); -T is the read-stall timeout, so keep
+		# it above the worst-case handler time to avoid false errors
+		wget -q -T 60 -O - "http://127.0.0.1:$(port)/api?action=${name}" 2>/dev/null ||
 			fail_json "serve unreachable"
 		;;
 	service)
