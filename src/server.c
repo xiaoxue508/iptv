@@ -257,6 +257,7 @@ int server_run(void)
 {
     mkdir_p(g.cache_dir);
     mkdir_p(g.data_dir);
+    status_init();
     cache_load_disk();
     plat_load_session(g.session);
 

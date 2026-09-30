@@ -44,36 +44,42 @@ void status_page(dbuf *out)
         stale, chs, cache_progs_count());
 }
 
+static time_t g_start;
+
+void status_init(void)
+{
+    g_start = now_sec();
+}
+
 void status_json(dbuf *out)
 {
-    static time_t start;
-    if (!start) start = now_sec();
+    if (!g_start) g_start = now_sec();
 
     jv *o = jobj();
     char num[32];
 
-#define NUM(field, v) do { \
+#define NUM(obj, field, v) do { \
         snprintf(num, sizeof num, "%ld", (long)(v)); \
-        jobj_set(o, field, jnum(num)); \
+        jobj_set(obj, field, jnum(num)); \
     } while (0)
 
     jobj_set(o, "version", jstr(IPTVD_VERSION));
-    NUM("uptime_s", now_sec() - start);
-    NUM("port", g.port);
+    NUM(o, "uptime_s", now_sec() - g_start);
+    NUM(o, "port", g.port);
 
     jv *ch = jobj();
     struct stat st;
-    if (stat(g.channels, &st) == 0) NUM("age_s", now_sec() - st.st_mtime);
-    NUM("count", cache_channels_count());
-    NUM("ttl_s", g.ttl_channels);
+    if (stat(g.channels, &st) == 0) NUM(ch, "age_s", now_sec() - st.st_mtime);
+    NUM(ch, "count", cache_channels_count());
+    NUM(ch, "ttl_s", g.ttl_channels);
     jobj_set(o, "channels", ch);
 
     jv *e = jobj();
-    if (stat(g.epg_file, &st) == 0) NUM("built_s", now_sec() - st.st_mtime);
+    if (stat(g.epg_file, &st) == 0) NUM(e, "built_s", now_sec() - st.st_mtime);
     jobj_set(o, "epg", e);
     jobj_set(o, "epg_ready", jbool(epgxml_ready()));
 
-    NUM("programs_cache", cache_progs_count());
+    NUM(o, "programs_cache", cache_progs_count());
     jobj_set(o, "session", jbool(g_sess.have));
 #undef NUM
 
